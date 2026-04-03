@@ -621,7 +621,7 @@ function _drawCards(root, positions, people) {
       defs.appendChild(clipPath);
 
       g.appendChild(_svgEl('image', {
-        href: '/uploads/' + person.photo,
+        href: person.photo.startsWith('http') ? person.photo : '/uploads/' + person.photo,
         x: midX - photoR, y: photoCY - photoR,
         width: photoR * 2, height: photoR * 2,
         'clip-path': 'url(#' + clipId + ')',

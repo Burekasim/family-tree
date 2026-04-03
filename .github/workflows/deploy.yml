@@ -53,7 +53,8 @@ jobs:
             --resolve-s3 \
             --parameter-overrides \
               DomainName=${{ vars.DOMAIN_NAME }} \
-              CertificateArn=${{ vars.CERTIFICATE_ARN }}
+              CertificateArn=${{ vars.CERTIFICATE_ARN }} \
+              ApiToken=${{ secrets.API_TOKEN }}
 
       - name: Get stack outputs
         id: outputs

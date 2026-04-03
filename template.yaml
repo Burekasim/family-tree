@@ -9,6 +9,10 @@ Parameters:
   CertificateArn:
     Type: String
     Description: ACM certificate ARN (must be in us-east-1) for the custom domain
+  ApiToken:
+    Type: String
+    NoEcho: true
+    Description: Bearer token required on all API requests
 
 Globals:
   Function:
@@ -20,7 +24,8 @@ Globals:
         PEOPLE_TABLE: !Ref PeopleTable
         RELS_TABLE: !Ref RelationshipsTable
         PHOTOS_BUCKET: !Ref PhotosBucket
-        PHOTOS_URL: !Sub 'https://${PhotosBucket}.s3.${AWS::Region}.amazonaws.com'
+        PHOTOS_URL: !Sub 'https://${DomainName}'
+        API_TOKEN: !Ref ApiToken
 
 Resources:
 
@@ -175,12 +180,22 @@ Resources:
             CustomOriginConfig:
               HTTPSPort: 443
               OriginProtocolPolicy: https-only
+          - Id: PhotosS3
+            DomainName: !Sub '${PhotosBucket}.s3.${AWS::Region}.amazonaws.com'
+            CustomOriginConfig:
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
         DefaultCacheBehavior:
           TargetOriginId: FrontendS3
           ViewerProtocolPolicy: redirect-to-https
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6   # Managed-CachingOptimized
           AllowedMethods: [GET, HEAD, OPTIONS]
         CacheBehaviors:
+          - PathPattern: /uploads/*
+            TargetOriginId: PhotosS3
+            ViewerProtocolPolicy: https-only
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # Managed-CachingOptimized
+            AllowedMethods: [GET, HEAD]
           - PathPattern: /api/*
             TargetOriginId: ApiGateway
             ViewerProtocolPolicy: https-only

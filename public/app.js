@@ -64,14 +64,21 @@ function _apiUrl(path) {
   return base + path;
 }
 
+function _authHeaders(extra) {
+  var token = sessionStorage.getItem('ft_token') || '';
+  var h = { 'Authorization': 'Bearer ' + token };
+  if (extra) Object.assign(h, extra);
+  return h;
+}
+
 function apiGet(url) {
-  return fetch(_apiUrl(url)).then(function(r) { return r.json(); });
+  return fetch(_apiUrl(url), { headers: _authHeaders() }).then(function(r) { return r.json(); });
 }
 
 function apiPost(url, data) {
   return fetch(_apiUrl(url), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: _authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(data)
   }).then(function(r) { return r.json(); });
 }
@@ -79,13 +86,13 @@ function apiPost(url, data) {
 function apiPut(url, data) {
   return fetch(_apiUrl(url), {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: _authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(data)
   }).then(function(r) { return r.json(); });
 }
 
 function apiDelete(url) {
-  return fetch(_apiUrl(url), { method: 'DELETE' }).then(function(r) { return r.json(); });
+  return fetch(_apiUrl(url), { method: 'DELETE', headers: _authHeaders() }).then(function(r) { return r.json(); });
 }
 
 // ============================================================
@@ -468,6 +475,25 @@ function savePersonModal() {
 // Photo Upload
 // ============================================================
 
+function resizeImage(file, maxPx, quality, cb) {
+  var img = new Image();
+  var url = URL.createObjectURL(file);
+  img.onload = function() {
+    URL.revokeObjectURL(url);
+    var w = img.width, h = img.height;
+    if (w > maxPx || h > maxPx) {
+      if (w >= h) { h = Math.round(h * maxPx / w); w = maxPx; }
+      else        { w = Math.round(w * maxPx / h); h = maxPx; }
+    }
+    var canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    canvas.toBlob(function(blob) { cb(blob, 'image/jpeg'); }, 'image/jpeg', quality);
+  };
+  img.onerror = function() { cb(file, file.type); }; // fallback: upload original
+  img.src = url;
+}
+
 function setupPhotoUpload() {
   var area = document.getElementById('photo-upload-area');
   var fileInput = document.getElementById('photo-file-input');
@@ -484,43 +510,40 @@ function setupPhotoUpload() {
 
     var cfg = window.APP_CONFIG || {};
 
-    if (cfg.usePresignedUpload) {
-      // Presigned S3 PUT upload
-      apiPost('/api/upload-url', { filename: file.name, contentType: file.type })
-        .then(function(data) {
-          if (data.error) { showError(data.error); return; }
-          return fetch(data.uploadUrl, {
-            method: 'PUT',
-            headers: { 'Content-Type': file.type },
-            body: file
-          }).then(function(r) {
-            if (!r.ok) throw new Error('Upload failed: ' + r.status);
-            state.photoFilename = data.photoUrl;
-            preview.src = data.photoUrl;
+    // Resize image client-side before uploading (max 1200px, JPEG 85%)
+    resizeImage(file, 1200, 0.85, function(blob, mimeType) {
+      if (cfg.usePresignedUpload) {
+        apiPost('/api/upload-url', { filename: file.name, contentType: mimeType })
+          .then(function(data) {
+            if (data.error) { showError(data.error); return; }
+            return fetch(data.uploadUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': mimeType },
+              body: blob
+            }).then(function(r) {
+              if (!r.ok) throw new Error('Upload failed: ' + r.status);
+              state.photoFilename = data.photoUrl;
+              preview.src = data.photoUrl;
+              preview.classList.remove('hidden');
+              placeholder.style.display = 'none';
+            });
+          })
+          .catch(function(err) { showError('העלאה נכשלה: ' + err.message); });
+      } else {
+        var formData = new FormData();
+        formData.append('photo', blob, file.name);
+        fetch('/api/upload', { method: 'POST', body: formData })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.error) { showError(data.error); return; }
+            state.photoFilename = data.filename;
+            preview.src = data.url;
             preview.classList.remove('hidden');
             placeholder.style.display = 'none';
-          });
-        })
-        .catch(function(err) {
-          showError('העלאה נכשלה: ' + err.message);
-        });
-    } else {
-      // Local Express multipart upload (dev)
-      var formData = new FormData();
-      formData.append('photo', file);
-      fetch('/api/upload', { method: 'POST', body: formData })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data.error) { showError(data.error); return; }
-          state.photoFilename = data.filename;
-          preview.src = data.url;
-          preview.classList.remove('hidden');
-          placeholder.style.display = 'none';
-        })
-        .catch(function(err) {
-          showError('העלאה נכשלה: ' + err.message);
-        });
-    }
+          })
+          .catch(function(err) { showError('העלאה נכשלה: ' + err.message); });
+      }
+    });
   });
 
   // Drag and drop
@@ -918,6 +941,7 @@ function setupPasswordGate() {
   var CORRECT = 'heymakarenea';
 
   if (sessionStorage.getItem('ft_auth') === '1') {
+    sessionStorage.setItem('ft_token', CORRECT);
     gate.classList.add('hidden');
     return;
   }
@@ -929,7 +953,9 @@ function setupPasswordGate() {
   function tryPassword() {
     if (input.value === CORRECT) {
       sessionStorage.setItem('ft_auth', '1');
+      sessionStorage.setItem('ft_token', CORRECT);
       gate.classList.add('hidden');
+      refreshTree(); // load data now that we're authenticated
     } else {
       errEl.textContent = 'סיסמה שגויה, נסה שוב.';
       input.classList.add('error');
@@ -952,13 +978,8 @@ document.addEventListener('DOMContentLoaded', function() {
   setupPhotoUpload();
   setupSearch();
 
-  // Load initial data
-  apiGet('/api/tree').then(function(data) {
-    state.people = data.people || [];
-    state.relationships = data.relationships || [];
-    window.renderTree(state.people, state.relationships);
-    refreshUpcomingWidget();
-  }).catch(function(err) {
-    console.error('Failed to load tree data:', err);
-  });
+  // Load initial data only if already authenticated
+  if (sessionStorage.getItem('ft_auth') === '1') {
+    refreshTree();
+  }
 });

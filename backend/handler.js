@@ -11,6 +11,7 @@ const PEOPLE_TABLE  = process.env.PEOPLE_TABLE;
 const RELS_TABLE    = process.env.RELS_TABLE;
 const PHOTOS_BUCKET = process.env.PHOTOS_BUCKET;
 const PHOTOS_URL    = process.env.PHOTOS_URL;
+const API_TOKEN     = process.env.API_TOKEN;
 
 // ── Helpers ──────────────────────────────────────────────────
 function respond(status, body) {
@@ -49,6 +50,12 @@ exports.handler = async (event) => {
   const path   = event.rawPath || '';
 
   if (method === 'OPTIONS') return respond(200, {});
+
+  // Auth check
+  const auth = (event.headers || {})['authorization'] || '';
+  if (API_TOKEN && auth !== 'Bearer ' + API_TOKEN) {
+    return respond(401, { error: 'Unauthorized' });
+  }
 
   try {
 
