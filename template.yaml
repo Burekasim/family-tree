@@ -2,6 +2,14 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: Family Tree — serverless stack
 
+Parameters:
+  DomainName:
+    Type: String
+    Description: Custom domain for CloudFront (e.g. family.avi.co.il)
+  CertificateArn:
+    Type: String
+    Description: ACM certificate ARN (must be in us-east-1) for the custom domain
+
 Globals:
   Function:
     Runtime: nodejs18.x
@@ -151,6 +159,12 @@ Resources:
         Enabled: true
         DefaultRootObject: index.html
         HttpVersion: http2
+        Aliases:
+          - !Ref DomainName
+        ViewerCertificate:
+          AcmCertificateArn: !Ref CertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
         Origins:
           - Id: FrontendS3
             DomainName: !GetAtt FrontendBucket.RegionalDomainName
@@ -181,7 +195,7 @@ Outputs:
     Description: API Gateway URL
 
   CloudFrontUrl:
-    Value: !Sub 'https://${CloudFrontDistribution.DomainName}'
+    Value: !Sub 'https://${DomainName}'
     Description: CloudFront URL (public app URL)
 
   FrontendBucketName:
