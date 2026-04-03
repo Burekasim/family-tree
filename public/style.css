@@ -107,6 +107,30 @@ body {
 }
 #tree-svg:active { cursor: grabbing; }
 
+/* ===== Edge Legend ===== */
+.edge-legend {
+  position: absolute;
+  bottom: 154px; /* sit above zoom controls */
+  right: 24px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  box-shadow: var(--shadow);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-light);
+  white-space: nowrap;
+}
+
 /* ===== Zoom Controls ===== */
 .zoom-controls {
   position: absolute;

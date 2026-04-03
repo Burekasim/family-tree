@@ -342,9 +342,9 @@ function _drawEdges(root, positions, people, relationships) {
 
     var line = _svgEl('line', {
       x1: x1, y1: y, x2: x2, y2: y,
-      stroke: '#fbb6ce',
-      'stroke-width': 2,
-      'stroke-dasharray': '5,3'
+      stroke: '#ed64a6',
+      'stroke-width': 2.5,
+      'stroke-dasharray': '6,3'
     });
     edgeGroup.appendChild(line);
 
@@ -445,7 +445,7 @@ function _drawEdges(root, positions, people, relationships) {
     // Stem: parent anchor → junction
     edgeGroup.appendChild(_svgEl('line', {
       x1: anchorX, y1: parentBottom, x2: anchorX, y2: junctionY,
-      stroke: '#5b8dee', 'stroke-width': 2
+      stroke: '#48bb78', 'stroke-width': 2
     }));
 
     // Horizontal bar spanning all children (and parent anchor if outside)
@@ -453,13 +453,13 @@ function _drawEdges(root, positions, people, relationships) {
     var barX2 = Math.max(anchorX, maxCX);
     edgeGroup.appendChild(_svgEl('line', {
       x1: barX1, y1: junctionY, x2: barX2, y2: junctionY,
-      stroke: '#5b8dee', 'stroke-width': 2
+      stroke: '#48bb78', 'stroke-width': 2
     }));
 
     // Junction dot — the dedicated connection marker
     edgeGroup.appendChild(_svgEl('circle', {
       cx: anchorX, cy: junctionY, r: 4,
-      fill: '#5b8dee', stroke: 'none'
+      fill: '#48bb78', stroke: 'none'
     }));
 
     // Drops from bar to each child
@@ -468,7 +468,7 @@ function _drawEdges(root, positions, people, relationships) {
       var ccx = cpos.x + CARD_W / 2;
       edgeGroup.appendChild(_svgEl('line', {
         x1: ccx, y1: junctionY, x2: ccx, y2: cpos.y,
-        stroke: '#5b8dee', 'stroke-width': 2
+        stroke: '#48bb78', 'stroke-width': 2
       }));
     });
   });
