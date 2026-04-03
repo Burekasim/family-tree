@@ -1,11 +1,11 @@
 // ===== tree.js — Layout + SVG Rendering =====
 // No ES modules. Global functions only.
 
-var CARD_W = 160;
-var CARD_H = 85;
+var CARD_W = 185;
+var CARD_H = 100;
 var COUPLE_GAP = 18;
-var H_GAP = 55;
-var V_GAP = 140;
+var H_GAP = 60;
+var V_GAP = 150;
 
 var SVG_NS = 'http://www.w3.org/2000/svg';
 var XLINK_NS = 'http://www.w3.org/1999/xlink';
@@ -527,81 +527,68 @@ function _drawCards(root, positions, people) {
     });
     g.appendChild(rect);
 
-    // Photo circle
-    var cx = x + 32;
-    var cy = y + CARD_H / 2;
-    var r = 26;
+    var firstName = person.first_name || '';
+    var lastName = person.last_name || '';
+    var fullName = (firstName + ' ' + lastName).trim();
+    var midX = x + CARD_W / 2;
+
+    // Photo: circular, top-center, so name can use full width below it
+    var photoR = 24;
+    var photoCY = y + photoR + 8; // 8px top margin
 
     if (person.photo) {
-      // ClipPath for circular photo
       var clipId = 'clip-' + id;
       var clipPath = _svgEl('clipPath', { id: clipId, class: 'photo-clip' });
-      var clipCircle = _svgEl('circle', { cx: cx, cy: cy, r: r });
-      clipPath.appendChild(clipCircle);
+      clipPath.appendChild(_svgEl('circle', { cx: midX, cy: photoCY, r: photoR }));
       defs.appendChild(clipPath);
 
-      var img = _svgEl('image', {
+      g.appendChild(_svgEl('image', {
         href: '/uploads/' + person.photo,
-        x: cx - r, y: cy - r,
-        width: r * 2, height: r * 2,
+        x: midX - photoR, y: photoCY - photoR,
+        width: photoR * 2, height: photoR * 2,
         'clip-path': 'url(#' + clipId + ')',
         preserveAspectRatio: 'xMidYMid slice'
-      });
-      g.appendChild(img);
+      }));
 
-      // Circle border over photo
-      var photoBorder = _svgEl('circle', {
-        cx: cx, cy: cy, r: r,
-        fill: 'none',
-        stroke: strokeColor,
-        'stroke-width': 1.5
-      });
-      g.appendChild(photoBorder);
+      // Border ring over photo
+      g.appendChild(_svgEl('circle', {
+        cx: midX, cy: photoCY, r: photoR,
+        fill: 'none', stroke: strokeColor, 'stroke-width': 1.5
+      }));
     } else {
-      // Small colored circle — gender indicator only, no initials
-      var circleBg = _svgEl('circle', {
-        cx: x + 14, cy: y + 14, r: 7,
+      // Small gender-color dot, top-left
+      g.appendChild(_svgEl('circle', {
+        cx: x + 14, cy: y + 14, r: 6,
         fill: _initialsCircleFill(person.gender),
-        stroke: strokeColor,
-        'stroke-width': 1.5
-      });
-      g.appendChild(circleBg);
+        stroke: strokeColor, 'stroke-width': 1.5
+      }));
     }
 
-    // Deceased indicator: show ז"ל in top-right corner
+    // ז"ל — top-right corner
     if (person.is_deceased || person.death_date) {
       var zlText = _svgEl('text', {
         x: x + CARD_W - 6, y: y + 14,
-        'text-anchor': 'end',
-        'dominant-baseline': 'central',
-        'font-size': '10',
-        'font-weight': '600',
-        fill: '#718096',
+        'text-anchor': 'end', 'dominant-baseline': 'central',
+        'font-size': '10', 'font-weight': '600', fill: '#718096',
         style: 'user-select:none;pointer-events:none'
       });
       zlText.textContent = 'ז"ל';
       g.appendChild(zlText);
     }
 
-    // Name text — centered in card
-    var firstName = person.first_name || '';
-    var lastName = person.last_name || '';
-    var fullName = (firstName + ' ' + lastName).trim();
-    var textX = person.photo ? x + 68 : x + CARD_W / 2;
-    var textAnchor = person.photo ? 'start' : 'middle';
-
+    // Name — always centered, full card width
+    // When photo present, sits below photo; otherwise sits in upper half
+    var nameY = person.photo ? (photoCY + photoR + 12) : (y + 44);
     var nameText = _svgEl('text', {
-      x: textX, y: y + (person.photo ? 30 : 34),
-      'font-size': '13',
-      'font-weight': '600',
-      'text-anchor': textAnchor,
-      fill: '#2d3748',
+      x: midX, y: nameY,
+      'font-size': '13', 'font-weight': '600',
+      'text-anchor': 'middle', fill: '#2d3748',
       style: 'user-select:none;pointer-events:none'
     });
-    nameText.textContent = _truncate(fullName, person.photo ? 12 : 17);
+    nameText.textContent = _truncate(fullName, 22);
     g.appendChild(nameText);
 
-    // Birth-death text
+    // Birth-death dates
     var birthYear = _yearFrom(person.birth_date);
     var deathYear = _yearFrom(person.death_date);
     var dateStr = '';
@@ -615,10 +602,8 @@ function _drawCards(root, positions, people) {
 
     if (dateStr) {
       var dateText = _svgEl('text', {
-        x: textX, y: y + (person.photo ? 47 : 52),
-        'font-size': '11',
-        'text-anchor': textAnchor,
-        fill: '#718096',
+        x: midX, y: nameY + 16,
+        'font-size': '11', 'text-anchor': 'middle', fill: '#718096',
         style: 'user-select:none;pointer-events:none'
       });
       dateText.textContent = dateStr;
@@ -628,10 +613,8 @@ function _drawCards(root, positions, people) {
     // Notes preview
     if (person.notes) {
       var notesText = _svgEl('text', {
-        x: textX, y: y + (person.photo ? 63 : 68),
-        'font-size': '10',
-        'text-anchor': textAnchor,
-        fill: '#a0aec0',
+        x: midX, y: nameY + 30,
+        'font-size': '10', 'text-anchor': 'middle', fill: '#a0aec0',
         style: 'user-select:none;pointer-events:none'
       });
       notesText.textContent = _truncate(person.notes, 22);
