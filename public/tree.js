@@ -322,6 +322,59 @@ function _drawEdges(root, positions, people, relationships) {
   var parentsOf = graph.parentsOf;
   var childrenOf = graph.childrenOf;
   var spousesOf = graph.spousesOf;
+  var ids = people.map(function(p) { return p.id; });
+
+  // ── Assign a unique color to each root family, then propagate to descendants ──
+  var BRANCH_COLORS = [
+    '#48bb78', // green
+    '#4299e1', // blue
+    '#ed8936', // orange
+    '#9f7aea', // purple
+    '#f56565', // red
+    '#38b2ac', // teal
+    '#d69e2e', // gold
+    '#00b5d8', // cyan
+  ];
+  var branchColor = {};
+  var colorIdx = 0;
+  var bfsVisited = {};
+  var bfsQueue = [];
+
+  // Seed: each root person (no parents) starts a new color
+  ids.forEach(function(id) {
+    if (parentsOf[id].length === 0 && !branchColor[id]) {
+      var col = BRANCH_COLORS[colorIdx % BRANCH_COLORS.length];
+      colorIdx++;
+      branchColor[id] = col;
+      // Spouse of root shares the same color
+      spousesOf[id].forEach(function(sid) {
+        if (!branchColor[sid]) branchColor[sid] = col;
+      });
+      bfsQueue.push(id);
+    }
+  });
+
+  // BFS: children inherit parent's color
+  while (bfsQueue.length > 0) {
+    var cur = bfsQueue.shift();
+    if (bfsVisited[cur]) continue;
+    bfsVisited[cur] = true;
+    var col = branchColor[cur];
+    childrenOf[cur].forEach(function(cid) {
+      if (!branchColor[cid]) {
+        branchColor[cid] = col;
+        spousesOf[cid].forEach(function(sid) {
+          if (!branchColor[sid]) branchColor[sid] = col;
+        });
+      }
+      bfsQueue.push(cid);
+    });
+  }
+
+  // Fallback for disconnected nodes
+  ids.forEach(function(id) {
+    if (!branchColor[id]) branchColor[id] = BRANCH_COLORS[colorIdx++ % BRANCH_COLORS.length];
+  });
 
   var edgeGroup = _svgEl('g', { class: 'edges' });
 
@@ -434,43 +487,67 @@ function _drawEdges(root, positions, people, relationships) {
       anchorX = pos.x + CARD_W / 2;
     }
 
-    // Junction-bar pattern: short vertical stem → horizontal bar across
-    // all children → short drops to each child card.
-    // A filled dot at the junction marks the dedicated family connection point.
+    // Color this family unit's edges by the parent's branch color
+    var edgeColor = branchColor[id] || '#48bb78';
+
+    // Wrap this unit's edges in a group so clicking it can highlight just this branch
+    var parentIds = spouse ? [id, spouse] : [id];
+    var unitGroup = _svgEl('g', {
+      class: 'edge-unit',
+      'data-unit': unitKey,
+      'data-parents': parentIds.join(','),
+      'data-children': unitChildren.join(','),
+      style: 'cursor:pointer'
+    });
+
     var childXs = unitChildren.map(function(cid) { return positions[cid].x + CARD_W / 2; });
     var minCX = Math.min.apply(null, childXs);
     var maxCX = Math.max.apply(null, childXs);
     var junctionY = parentBottom + Math.round(V_GAP * 0.45);
 
-    // Stem: parent anchor → junction
-    edgeGroup.appendChild(_svgEl('line', {
+    // Invisible fat hit area on the stem for easier clicking
+    unitGroup.appendChild(_svgEl('line', {
       x1: anchorX, y1: parentBottom, x2: anchorX, y2: junctionY,
-      stroke: '#48bb78', 'stroke-width': 2
+      stroke: 'transparent', 'stroke-width': 12
+    }));
+    unitGroup.appendChild(_svgEl('line', {
+      x1: anchorX, y1: parentBottom, x2: anchorX, y2: junctionY,
+      stroke: edgeColor, 'stroke-width': 2
     }));
 
-    // Horizontal bar spanning all children (and parent anchor if outside)
     var barX1 = Math.min(anchorX, minCX);
     var barX2 = Math.max(anchorX, maxCX);
-    edgeGroup.appendChild(_svgEl('line', {
+    unitGroup.appendChild(_svgEl('line', {
       x1: barX1, y1: junctionY, x2: barX2, y2: junctionY,
-      stroke: '#48bb78', 'stroke-width': 2
+      stroke: edgeColor, 'stroke-width': 2
     }));
 
-    // Junction dot — the dedicated connection marker
-    edgeGroup.appendChild(_svgEl('circle', {
+    unitGroup.appendChild(_svgEl('circle', {
       cx: anchorX, cy: junctionY, r: 4,
-      fill: '#48bb78', stroke: 'none'
+      fill: edgeColor, stroke: 'none'
     }));
 
-    // Drops from bar to each child
     unitChildren.forEach(function(cid) {
       var cpos = positions[cid];
       var ccx = cpos.x + CARD_W / 2;
-      edgeGroup.appendChild(_svgEl('line', {
+      unitGroup.appendChild(_svgEl('line', {
         x1: ccx, y1: junctionY, x2: ccx, y2: cpos.y,
-        stroke: '#48bb78', 'stroke-width': 2
+        stroke: edgeColor, 'stroke-width': 2
       }));
     });
+
+    // Click on this unit → highlight involved people, dim everything else
+    (function(pId, spId, children, color) {
+      unitGroup.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var involved = [pId];
+        if (spId) involved.push(spId);
+        children.forEach(function(cid) { involved.push(cid); });
+        window.highlightFamily(involved, color);
+      });
+    })(id, spouse, unitChildren.slice(), edgeColor);
+
+    edgeGroup.appendChild(unitGroup);
   });
 
   root.appendChild(edgeGroup);
@@ -799,6 +876,56 @@ function _onTouchEnd() {
 }
 
 // ============================================================
+// Highlight family on edge click — dims everything else
+// ============================================================
+
+window.highlightFamily = function(involvedIds, color) {
+  var idSet = {};
+  involvedIds.forEach(function(id) { idSet[id] = true; });
+
+  // Dim / restore cards
+  document.querySelectorAll('.person-node').forEach(function(node) {
+    var pid = parseInt(node.dataset.id);
+    if (idSet[pid]) {
+      node.style.opacity = '1';
+      var rect = node.querySelector('.card-rect');
+      if (rect) { rect.setAttribute('stroke', color); rect.setAttribute('stroke-width', '2.5'); }
+    } else {
+      node.style.opacity = '0.2';
+    }
+  });
+
+  // Dim / restore edge units
+  document.querySelectorAll('.edge-unit').forEach(function(g) {
+    var unitKey = g.getAttribute('data-unit');
+    // Show unit if any parent/child is in the involved set
+    // We tag the unit's parent ids via data-parents on the group (set below)
+    var parents = (g.getAttribute('data-parents') || '').split(',').map(Number);
+    var children = (g.getAttribute('data-children') || '').split(',').map(Number);
+    var relevant = parents.concat(children).some(function(id) { return idSet[id]; });
+    g.style.opacity = relevant ? '1' : '0.15';
+  });
+};
+
+window.clearFamilyHighlight = function() {
+  document.querySelectorAll('.person-node').forEach(function(node) {
+    node.style.opacity = '';
+    var pid = parseInt(node.dataset.id);
+    var person = _personById(pid);
+    if (person) {
+      var rect = node.querySelector('.card-rect');
+      if (rect && !node.classList.contains('selected')) {
+        rect.setAttribute('stroke', _cardStroke(person.gender));
+        rect.setAttribute('stroke-width', '1.5');
+      }
+    }
+  });
+  document.querySelectorAll('.edge-unit').forEach(function(g) {
+    g.style.opacity = '';
+  });
+};
+
+// ============================================================
 // Highlight search matches
 // ============================================================
 
@@ -885,10 +1012,11 @@ document.addEventListener('DOMContentLoaded', function() {
     _applyTransform();
   });
 
-  // Click on SVG background → deselect
+  // Click on SVG background → deselect + clear highlight
   svg.addEventListener('click', function(e) {
-    if (!e.target.closest('.person-node')) {
+    if (!e.target.closest('.person-node') && !e.target.closest('.edge-unit')) {
       if (window.deselectPerson) window.deselectPerson();
+      if (window.clearFamilyHighlight) window.clearFamilyHighlight();
     }
   });
 });
