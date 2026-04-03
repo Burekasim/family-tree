@@ -320,7 +320,24 @@ function closeModal(id) {
 // Person Modal
 // ============================================================
 
-function openAddPersonModal() {
+function _populateParentSelect(preselectedId) {
+  var sel = document.getElementById('inp-parent');
+  sel.innerHTML = '<option value="">— ללא הורה —</option>';
+  var sorted = state.people.slice().sort(function(a, b) {
+    var an = ((a.first_name || '') + ' ' + (a.last_name || '')).trim();
+    var bn = ((b.first_name || '') + ' ' + (b.last_name || '')).trim();
+    return an < bn ? -1 : an > bn ? 1 : 0;
+  });
+  sorted.forEach(function(p) {
+    var opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = personName(p.id);
+    if (p.id === preselectedId) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function openAddPersonModal(preselectedParentId) {
   state.editingPersonId = null;
   state.photoFilename = null;
 
@@ -332,6 +349,10 @@ function openAddPersonModal() {
   document.getElementById('inp-death-date').value = '';
   document.getElementById('inp-deceased').checked = false;
   document.getElementById('inp-notes').value = '';
+
+  // Parent selector — show only when adding
+  document.getElementById('inp-parent-wrap').style.display = '';
+  _populateParentSelect(preselectedParentId || null);
 
   // Reset photo
   var preview = document.getElementById('photo-preview');
@@ -373,6 +394,9 @@ function openEditPersonModal(id) {
     placeholder.style.display = 'flex';
   }
 
+  // Hide parent selector when editing
+  document.getElementById('inp-parent-wrap').style.display = 'none';
+
   openModal('modal-person');
   document.getElementById('inp-first-name').focus();
 }
@@ -409,13 +433,26 @@ function savePersonModal() {
     closeModal('modal-person');
     var wasEditing = state.editingPersonId;
     state.editingPersonId = null;
-    refreshTree().then(function() {
-      if (wasEditing) {
-        showPersonPanel(wasEditing);
-      } else if (person.id) {
-        showPersonPanel(person.id);
-      }
-    });
+
+    // If a parent was selected, create the relationship before refreshing
+    var parentId = !wasEditing && parseInt(document.getElementById('inp-parent').value);
+    if (parentId && person.id) {
+      apiPost('/api/relationships', {
+        person1_id: parentId,
+        person2_id: person.id,
+        type: 'parent'
+      }).then(function() {
+        refreshTree().then(function() { showPersonPanel(person.id); });
+      });
+    } else {
+      refreshTree().then(function() {
+        if (wasEditing) {
+          showPersonPanel(wasEditing);
+        } else if (person.id) {
+          showPersonPanel(person.id);
+        }
+      });
+    }
   }).catch(function(err) {
     showError('שגיאה בשמירת האדם: ' + err.message);
   });

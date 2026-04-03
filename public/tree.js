@@ -735,7 +735,7 @@ function _applyTransform() {
 
 function _onWheel(e) {
   e.preventDefault();
-  var factor = Math.pow(0.999, e.deltaY);
+  var factor = Math.pow(0.9985, e.deltaY);
   _scale = Math.min(3, Math.max(0.15, _scale * factor));
   _applyTransform();
 }
