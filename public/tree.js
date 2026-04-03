@@ -179,7 +179,8 @@ function _computeLayout(people, relationships) {
   relationships.forEach(function(r) {
     if (r.type !== 'spouse') return;
     var a = r.person1_id, b = r.person2_id;
-    var key = Math.min(a, b) + ':' + Math.max(a, b);
+    var sorted = [a, b].sort();
+    var key = sorted[0] + ':' + sorted[1];
     if (families[key]) return;
     // Shared children: any child whose parent list contains both a and b
     var shared = childrenOf[a].filter(function(cid) {
@@ -189,7 +190,7 @@ function _computeLayout(people, relationships) {
     childrenOf[b].forEach(function(cid) {
       if (parentsOf[cid].indexOf(a) !== -1 && shared.indexOf(cid) === -1) shared.push(cid);
     });
-    families[key] = { parents: [Math.min(a, b), Math.max(a, b)], children: shared };
+    families[key] = { parents: [sorted[0], sorted[1]], children: shared };
     if (!personToUnit[a]) personToUnit[a] = key;
     if (!personToUnit[b]) personToUnit[b] = key;
   });
@@ -885,7 +886,7 @@ window.highlightFamily = function(involvedIds, color) {
 
   // Dim / restore cards
   document.querySelectorAll('.person-node').forEach(function(node) {
-    var pid = parseInt(node.dataset.id);
+    var pid = node.dataset.id;
     if (idSet[pid]) {
       node.style.opacity = '1';
       var rect = node.querySelector('.card-rect');
@@ -900,8 +901,8 @@ window.highlightFamily = function(involvedIds, color) {
     var unitKey = g.getAttribute('data-unit');
     // Show unit if any parent/child is in the involved set
     // We tag the unit's parent ids via data-parents on the group (set below)
-    var parents = (g.getAttribute('data-parents') || '').split(',').map(Number);
-    var children = (g.getAttribute('data-children') || '').split(',').map(Number);
+    var parents = (g.getAttribute('data-parents') || '').split(',');
+    var children = (g.getAttribute('data-children') || '').split(',');
     var relevant = parents.concat(children).some(function(id) { return idSet[id]; });
     g.style.opacity = relevant ? '1' : '0.15';
   });
@@ -910,8 +911,7 @@ window.highlightFamily = function(involvedIds, color) {
 window.clearFamilyHighlight = function() {
   document.querySelectorAll('.person-node').forEach(function(node) {
     node.style.opacity = '';
-    var pid = parseInt(node.dataset.id);
-    var person = _personById(pid);
+    var person = _personById(node.dataset.id);
     if (person) {
       var rect = node.querySelector('.card-rect');
       if (rect && !node.classList.contains('selected')) {
@@ -955,9 +955,8 @@ window.markSelectedPerson = function(id) {
     node.classList.remove('selected');
     // Reset card rect
     var rect = node.querySelector('.card-rect');
-    if (rect && node.dataset.id != id) {
-      var pid = parseInt(node.dataset.id);
-      var person = _personById(pid);
+    if (rect && node.dataset.id !== String(id)) {
+      var person = _personById(node.dataset.id);
       if (person) {
         rect.setAttribute('stroke', _cardStroke(person.gender));
         rect.setAttribute('stroke-width', '1.5');
