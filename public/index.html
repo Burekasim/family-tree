@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>עץ משפחה</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="app-title">🌳 עץ משפחה</span>
+    </div>
+    <div class="topbar-center" style="position:relative">
+      <input type="text" id="search-input" class="search-input" placeholder="חפש אנשים…" autocomplete="off">
+      <ul id="search-dropdown" class="search-dropdown hidden"></ul>
+    </div>
+    <div class="topbar-right">
+      <button class="btn btn-primary" id="btn-add-person" title="הוסף אדם">
+        <span class="btn-icon">＋</span>
+        <span class="btn-label"> אדם</span>
+      </button>
+      <button class="btn btn-secondary" id="btn-add-rel" title="הוסף קשר">
+        <span class="btn-icon">＋</span>
+        <span class="btn-label"> קשר</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Tree Area -->
+  <main class="tree-container">
+    <svg id="tree-svg">
+      <defs>
+        <filter id="card-shadow" x="-10%" y="-10%" width="120%" height="130%">
+          <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="rgba(0,0,0,0.10)"/>
+        </filter>
+      </defs>
+      <g id="tree-root"></g>
+    </svg>
+
+    <!-- Zoom Controls -->
+    <div class="zoom-controls">
+      <button class="zoom-btn" id="zoom-in" title="הגדל">＋</button>
+      <button class="zoom-btn" id="zoom-out" title="הקטן">－</button>
+      <button class="zoom-btn" id="zoom-reset" title="אפס תצוגה">⌂</button>
+    </div>
+
+    <!-- Empty State -->
+    <div id="empty-state" class="empty-state">
+      <div class="empty-icon">🌱</div>
+      <h2>התחל את עץ המשפחה שלך</h2>
+      <p>הוסף את בן משפחתך הראשון כדי להתחיל.</p>
+      <button class="btn btn-primary" id="btn-add-first">＋ הוסף אדם ראשון</button>
+    </div>
+  </main>
+
+  <!-- Person Panel (left slide-in for RTL) -->
+  <aside id="person-panel" class="person-panel hidden">
+    <button class="panel-close" id="panel-close" title="סגור">✕</button>
+    <div class="panel-photo-wrap">
+      <img id="panel-photo" src="" alt="" class="panel-photo hidden">
+      <div id="panel-initials" class="panel-initials"></div>
+    </div>
+    <div class="panel-body">
+      <h2 id="panel-name" class="panel-name"></h2>
+      <div id="panel-gender" class="gender-badge"></div>
+      <div id="panel-dates" class="panel-dates"></div>
+      <div id="panel-notes" class="panel-notes"></div>
+      <div id="panel-relationships" class="panel-relationships">
+        <h3 class="panel-section-title">קשרים</h3>
+        <ul id="panel-rel-list" class="rel-list"></ul>
+      </div>
+      <div id="panel-siblings" class="panel-relationships" style="display:none">
+        <h3 class="panel-section-title">אחים ואחיות</h3>
+        <ul id="panel-siblings-list" class="rel-list"></ul>
+      </div>
+      <div class="panel-actions">
+        <button class="btn btn-primary" id="btn-panel-add-rel">＋ קשר</button>
+        <button class="btn btn-secondary" id="btn-edit-person">✏️ ערוך</button>
+        <button class="btn btn-danger" id="btn-delete-person">🗑️ מחק</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===== ADD / EDIT PERSON MODAL ===== -->
+  <div id="modal-person" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modal-person-title">הוסף אדם</h2>
+        <button class="modal-close" data-modal="modal-person">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Photo Upload -->
+        <div class="photo-upload-area" id="photo-upload-area">
+          <img id="photo-preview" class="photo-preview hidden" src="" alt="">
+          <div id="photo-placeholder" class="photo-placeholder">
+            <span>📷</span>
+            <span>לחץ להעלאת תמונה</span>
+          </div>
+          <input type="file" id="photo-file-input" accept="image/*" style="display:none">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="inp-first-name">שם פרטי *</label>
+            <input type="text" id="inp-first-name" placeholder="שם פרטי" required>
+          </div>
+          <div class="form-group">
+            <label for="inp-last-name">שם משפחה</label>
+            <input type="text" id="inp-last-name" placeholder="שם משפחה">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="inp-gender">מגדר</label>
+            <select id="inp-gender">
+              <option value="Other">אחר / לא מוגדר</option>
+              <option value="M">זכר</option>
+              <option value="F">נקבה</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="inp-birth-date">תאריך לידה</label>
+            <input type="date" id="inp-birth-date">
+          </div>
+          <div class="form-group">
+            <label for="inp-death-date">תאריך פטירה</label>
+            <input type="date" id="inp-death-date">
+          </div>
+        </div>
+
+        <div class="form-group form-check">
+          <label class="check-label">
+            <input type="checkbox" id="inp-deceased">
+            <span>נפטר/ה (ז"ל)</span>
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="inp-notes">הערות</label>
+          <textarea id="inp-notes" rows="3" placeholder="הערות על אדם זה…"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-modal="modal-person">ביטול</button>
+        <button class="btn btn-primary" id="btn-save-person">שמור</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ADD RELATIONSHIP MODAL ===== -->
+  <div id="modal-rel" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>הוסף קשר</h2>
+        <button class="modal-close" data-modal="modal-rel">✕</button>
+      </div>
+      <div class="modal-body">
+
+        <div class="form-group">
+          <label for="rel-type">סוג קשר</label>
+          <select id="rel-type">
+            <option value="parent">הורה → ילד</option>
+            <option value="spouse">בן/בת זוג</option>
+          </select>
+        </div>
+
+        <!-- Parent fields -->
+        <div id="rel-parent-fields">
+          <div class="form-group">
+            <label for="rel-parent-select">הורה</label>
+            <select id="rel-parent-select">
+              <option value="">— בחר הורה —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="rel-child-select">ילד</label>
+            <select id="rel-child-select">
+              <option value="">— בחר ילד —</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Spouse fields -->
+        <div id="rel-spouse-fields" class="hidden">
+          <div class="form-group">
+            <label for="rel-spouse1-select">אדם 1</label>
+            <select id="rel-spouse1-select">
+              <option value="">— בחר אדם —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="rel-spouse2-select">אדם 2</label>
+            <select id="rel-spouse2-select">
+              <option value="">— בחר אדם —</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="rel-marriage-date">תאריך נישואין</label>
+              <input type="date" id="rel-marriage-date">
+            </div>
+            <div class="form-group">
+              <label for="rel-separation-date">תאריך פרידה</label>
+              <input type="date" id="rel-separation-date">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="rel-notes">הערות</label>
+          <textarea id="rel-notes" rows="2" placeholder="הערות (אופציונלי)…"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-modal="modal-rel">ביטול</button>
+        <button class="btn btn-primary" id="btn-save-rel">שמור קשר</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== UPCOMING EVENTS WIDGET ===== -->
+  <div id="upcoming-widget" class="upcoming-widget">
+    <div class="upcoming-title">אירועים קרובים</div>
+    <ul id="upcoming-list" class="upcoming-list"></ul>
+  </div>
+
+  <script src="tree.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

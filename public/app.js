@@ -1,0 +1,857 @@
+// ===== app.js — Application Logic =====
+// Runs after tree.js. No ES modules.
+
+var state = {
+  people: [],
+  relationships: [],
+  selectedPersonId: null,
+  editingPersonId: null,
+  photoFilename: null
+};
+
+// ============================================================
+// Utilities
+// ============================================================
+
+function personById(id) {
+  for (var i = 0; i < state.people.length; i++) {
+    if (state.people[i].id === id || state.people[i].id === Number(id)) {
+      return state.people[i];
+    }
+  }
+  return null;
+}
+
+function personName(id) {
+  var p = personById(id);
+  if (!p) return 'לא ידוע';
+  return ((p.first_name || '') + ' ' + (p.last_name || '')).trim();
+}
+
+function formatDate(str) {
+  if (!str) return '';
+  try {
+    var parts = str.split('-');
+    if (parts.length === 3) {
+      var months = ['ינו','פבר','מרץ','אפר','מאי','יונ','יול','אוג','ספט','אוק','נוב','דצמ'];
+      var d = parseInt(parts[2], 10);
+      var m = parseInt(parts[1], 10) - 1;
+      var y = parseInt(parts[0], 10);
+      return d + ' ' + months[m] + ' ' + y;
+    }
+    return str;
+  } catch(e) {
+    return str;
+  }
+}
+
+function yearFrom(str) {
+  if (!str) return null;
+  return str.slice(0, 4);
+}
+
+function showError(msg) {
+  alert('שגיאה: ' + msg);
+}
+
+// ============================================================
+// API helpers
+// ============================================================
+
+function apiGet(url) {
+  return fetch(url).then(function(r) { return r.json(); });
+}
+
+function apiPost(url, data) {
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(function(r) { return r.json(); });
+}
+
+function apiPut(url, data) {
+  return fetch(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(function(r) { return r.json(); });
+}
+
+function apiDelete(url) {
+  return fetch(url, { method: 'DELETE' }).then(function(r) { return r.json(); });
+}
+
+// ============================================================
+// Refresh tree
+// ============================================================
+
+function refreshTree() {
+  return apiGet('/api/tree').then(function(data) {
+    state.people = data.people || [];
+    state.relationships = data.relationships || [];
+    window.renderTree(state.people, state.relationships);
+    refreshUpcomingWidget();
+
+    // Re-highlight search
+    var searchTerm = document.getElementById('search-input').value.trim();
+    if (searchTerm) window.highlightSearch(searchTerm);
+
+    // Re-mark selected
+    if (state.selectedPersonId) {
+      window.markSelectedPerson(state.selectedPersonId);
+    }
+  });
+}
+
+// ============================================================
+// Person Panel
+// ============================================================
+
+function showPersonPanel(id) {
+  var person = personById(id);
+  if (!person) return;
+
+  state.selectedPersonId = id;
+  window.markSelectedPerson(id);
+
+  var panel = document.getElementById('person-panel');
+  panel.classList.remove('hidden');
+
+  // Photo
+  var photoEl = document.getElementById('panel-photo');
+  var initialsEl = document.getElementById('panel-initials');
+
+  if (person.photo) {
+    photoEl.src = '/uploads/' + person.photo;
+    photoEl.alt = personName(id);
+    photoEl.classList.remove('hidden');
+    initialsEl.style.display = 'none';
+  } else {
+    photoEl.classList.add('hidden');
+    initialsEl.style.display = 'flex';
+    var initials = ((person.first_name || '?')[0] + (person.last_name || '?')[0]).toUpperCase();
+    initialsEl.textContent = initials;
+
+    // Color based on gender
+    var genderColors = { M: '#bee3f8', F: '#fed7e2', Other: '#e2e8f0' };
+    initialsEl.style.background = genderColors[person.gender] || '#e2e8f0';
+  }
+
+  // Name (+ ז"ל if deceased)
+  var displayName = personName(id);
+  if (person.is_deceased || person.death_date) displayName += ' ז"ל';
+  document.getElementById('panel-name').textContent = displayName;
+
+  // Gender badge
+  var badge = document.getElementById('panel-gender');
+  badge.className = 'gender-badge';
+  var genderLabels = { M: 'זכר', F: 'נקבה', Other: 'אחר' };
+  badge.textContent = genderLabels[person.gender] || 'אחר';
+  var genderClasses = { M: 'male', F: 'female', Other: 'other' };
+  badge.classList.add(genderClasses[person.gender] || 'other');
+
+  // Dates
+  var datesEl = document.getElementById('panel-dates');
+  var dateParts = [];
+  if (person.birth_date) dateParts.push('נולד/ה: ' + formatDate(person.birth_date));
+  if (person.death_date) dateParts.push('נפטר/ה: ' + formatDate(person.death_date));
+  datesEl.textContent = dateParts.join('  ·  ');
+
+  // Notes
+  var notesEl = document.getElementById('panel-notes');
+  notesEl.textContent = person.notes || '';
+
+  // Relationships list
+  var relList = document.getElementById('panel-rel-list');
+  relList.innerHTML = '';
+
+  state.relationships.forEach(function(r) {
+    var relatedId = null;
+    var label = '';
+
+    if (r.type === 'parent') {
+      if (r.person1_id === id) {
+        relatedId = r.person2_id;
+        label = 'ילד/ה';
+      } else if (r.person2_id === id) {
+        relatedId = r.person1_id;
+        label = 'הורה';
+      }
+    } else if (r.type === 'spouse') {
+      if (r.person1_id === id) {
+        relatedId = r.person2_id;
+        label = 'בן/בת זוג';
+      } else if (r.person2_id === id) {
+        relatedId = r.person1_id;
+        label = 'בן/בת זוג';
+      }
+    }
+
+    if (relatedId === null) return;
+
+    var li = document.createElement('li');
+
+    var typeBadge = document.createElement('span');
+    typeBadge.className = 'rel-type-badge';
+    typeBadge.textContent = label;
+    li.appendChild(typeBadge);
+
+    var nameLink = document.createElement('span');
+    nameLink.className = 'rel-name-link';
+    nameLink.textContent = personName(relatedId);
+    (function(rid) {
+      nameLink.addEventListener('click', function() { showPersonPanel(rid); });
+    })(relatedId);
+    li.appendChild(nameLink);
+
+    // Delete relationship button
+    var delBtn = document.createElement('button');
+    delBtn.textContent = '✕';
+    delBtn.title = 'הסר קשר';
+    delBtn.style.cssText = 'margin-right:auto;background:none;border:none;color:#f56565;cursor:pointer;font-size:14px;padding:0 4px;';
+    (function(rid) {
+      delBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (confirm('להסיר קשר זה?')) {
+          apiDelete('/api/relationships/' + rid).then(function() {
+            refreshTree().then(function() {
+              showPersonPanel(state.selectedPersonId);
+            });
+          });
+        }
+      });
+    })(r.id);
+    li.appendChild(delBtn);
+
+    relList.appendChild(li);
+  });
+
+  // Siblings section — inferred via parent+spouse relationships
+  var siblingsSection = document.getElementById('panel-siblings');
+  var siblingsList = document.getElementById('panel-siblings-list');
+  siblingsList.innerHTML = '';
+
+  // Find direct parents of current person
+  var myParentIds = [];
+  state.relationships.forEach(function(r) {
+    if (r.type === 'parent' && r.person2_id === id) {
+      myParentIds.push(r.person1_id);
+    }
+  });
+
+  // Expand to include spouses of those parents (the full parent unit)
+  var parentUnitIds = myParentIds.slice();
+  myParentIds.forEach(function(pid) {
+    state.relationships.forEach(function(r) {
+      if (r.type === 'spouse') {
+        if (r.person1_id === pid && parentUnitIds.indexOf(r.person2_id) === -1) parentUnitIds.push(r.person2_id);
+        if (r.person2_id === pid && parentUnitIds.indexOf(r.person1_id) === -1) parentUnitIds.push(r.person1_id);
+      }
+    });
+  });
+
+  // All children of the parent unit (excluding self) = siblings
+  var siblingSet = {};
+  if (parentUnitIds.length > 0) {
+    state.relationships.forEach(function(r) {
+      if (r.type === 'parent' && r.person2_id !== id && parentUnitIds.indexOf(r.person1_id) !== -1) {
+        siblingSet[r.person2_id] = true;
+      }
+    });
+  }
+
+  var siblingIds = Object.keys(siblingSet).map(Number);
+  siblingsSection.style.display = siblingIds.length > 0 ? '' : 'none';
+  siblingIds.forEach(function(sid) {
+    var li = document.createElement('li');
+    var nameLink = document.createElement('span');
+    nameLink.className = 'rel-name-link';
+    nameLink.textContent = personName(sid);
+    (function(sibId) {
+      nameLink.addEventListener('click', function() { showPersonPanel(sibId); });
+    })(sid);
+    li.appendChild(nameLink);
+    siblingsList.appendChild(li);
+  });
+
+  // Add connection button
+  document.getElementById('btn-panel-add-rel').onclick = function() {
+    openRelModal(id);
+  };
+
+  // Edit button
+  document.getElementById('btn-edit-person').onclick = function() {
+    openEditPersonModal(id);
+  };
+
+  // Delete button
+  document.getElementById('btn-delete-person').onclick = function() {
+    if (confirm('למחוק את ' + personName(id) + '? פעולה זו תסיר גם את כל הקשרים שלהם.')) {
+      apiDelete('/api/people/' + id).then(function(data) {
+        if (data.error) { showError(data.error); return; }
+        state.selectedPersonId = null;
+        closePersonPanel();
+        refreshTree();
+      });
+    }
+  };
+}
+
+function closePersonPanel() {
+  state.selectedPersonId = null;
+  window.markSelectedPerson(null);
+  document.getElementById('person-panel').classList.add('hidden');
+}
+
+// ============================================================
+// Modal helpers
+// ============================================================
+
+function openModal(id) {
+  document.getElementById(id).classList.remove('hidden');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.add('hidden');
+}
+
+// ============================================================
+// Person Modal
+// ============================================================
+
+function openAddPersonModal() {
+  state.editingPersonId = null;
+  state.photoFilename = null;
+
+  document.getElementById('modal-person-title').textContent = 'הוסף אדם';
+  document.getElementById('inp-first-name').value = '';
+  document.getElementById('inp-last-name').value = '';
+  document.getElementById('inp-gender').value = 'Other';
+  document.getElementById('inp-birth-date').value = '';
+  document.getElementById('inp-death-date').value = '';
+  document.getElementById('inp-deceased').checked = false;
+  document.getElementById('inp-notes').value = '';
+
+  // Reset photo
+  var preview = document.getElementById('photo-preview');
+  var placeholder = document.getElementById('photo-placeholder');
+  preview.src = '';
+  preview.classList.add('hidden');
+  placeholder.style.display = 'flex';
+
+  openModal('modal-person');
+  document.getElementById('inp-first-name').focus();
+}
+
+function openEditPersonModal(id) {
+  var person = personById(id);
+  if (!person) return;
+
+  state.editingPersonId = id;
+  state.photoFilename = person.photo || null;
+
+  document.getElementById('modal-person-title').textContent = 'ערוך אדם';
+  document.getElementById('inp-first-name').value = person.first_name || '';
+  document.getElementById('inp-last-name').value = person.last_name || '';
+  document.getElementById('inp-gender').value = person.gender || 'Other';
+  document.getElementById('inp-birth-date').value = person.birth_date || '';
+  document.getElementById('inp-death-date').value = person.death_date || '';
+  document.getElementById('inp-deceased').checked = !!(person.is_deceased || person.death_date);
+  document.getElementById('inp-notes').value = person.notes || '';
+
+  // Photo preview
+  var preview = document.getElementById('photo-preview');
+  var placeholder = document.getElementById('photo-placeholder');
+  if (person.photo) {
+    preview.src = '/uploads/' + person.photo;
+    preview.classList.remove('hidden');
+    placeholder.style.display = 'none';
+  } else {
+    preview.src = '';
+    preview.classList.add('hidden');
+    placeholder.style.display = 'flex';
+  }
+
+  openModal('modal-person');
+  document.getElementById('inp-first-name').focus();
+}
+
+function savePersonModal() {
+  var firstName = document.getElementById('inp-first-name').value.trim();
+  if (!firstName) {
+    document.getElementById('inp-first-name').focus();
+    document.getElementById('inp-first-name').style.borderColor = '#f56565';
+    return;
+  }
+  document.getElementById('inp-first-name').style.borderColor = '';
+
+  var data = {
+    first_name: firstName,
+    last_name: document.getElementById('inp-last-name').value.trim(),
+    gender: document.getElementById('inp-gender').value,
+    birth_date: document.getElementById('inp-birth-date').value || null,
+    death_date: document.getElementById('inp-death-date').value || null,
+    is_deceased: document.getElementById('inp-deceased').checked ? 1 : 0,
+    notes: document.getElementById('inp-notes').value.trim() || null,
+    photo: state.photoFilename || null
+  };
+
+  var promise;
+  if (state.editingPersonId) {
+    promise = apiPut('/api/people/' + state.editingPersonId, data);
+  } else {
+    promise = apiPost('/api/people', data);
+  }
+
+  promise.then(function(person) {
+    if (person.error) { showError(person.error); return; }
+    closeModal('modal-person');
+    var wasEditing = state.editingPersonId;
+    state.editingPersonId = null;
+    refreshTree().then(function() {
+      if (wasEditing) {
+        showPersonPanel(wasEditing);
+      } else if (person.id) {
+        showPersonPanel(person.id);
+      }
+    });
+  }).catch(function(err) {
+    showError('שגיאה בשמירת האדם: ' + err.message);
+  });
+}
+
+// ============================================================
+// Photo Upload
+// ============================================================
+
+function setupPhotoUpload() {
+  var area = document.getElementById('photo-upload-area');
+  var fileInput = document.getElementById('photo-file-input');
+  var preview = document.getElementById('photo-preview');
+  var placeholder = document.getElementById('photo-placeholder');
+
+  area.addEventListener('click', function() {
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', function() {
+    var file = fileInput.files[0];
+    if (!file) return;
+
+    var formData = new FormData();
+    formData.append('photo', file);
+
+    fetch('/api/upload', { method: 'POST', body: formData })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) { showError(data.error); return; }
+        state.photoFilename = data.filename;
+        preview.src = data.url;
+        preview.classList.remove('hidden');
+        placeholder.style.display = 'none';
+      })
+      .catch(function(err) {
+        showError('העלאה נכשלה: ' + err.message);
+      });
+  });
+
+  // Drag and drop
+  area.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    area.style.borderColor = '#5b8dee';
+  });
+  area.addEventListener('dragleave', function() {
+    area.style.borderColor = '';
+  });
+  area.addEventListener('drop', function(e) {
+    e.preventDefault();
+    area.style.borderColor = '';
+    var file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      var dt = new DataTransfer();
+      dt.items.add(file);
+      fileInput.files = dt.files;
+      fileInput.dispatchEvent(new Event('change'));
+    }
+  });
+}
+
+// ============================================================
+// Relationship Modal
+// ============================================================
+
+function populatePersonSelects() {
+  var sorted = state.people.slice().sort(function(a, b) {
+    var an = ((a.first_name || '') + ' ' + (a.last_name || '')).trim().toLowerCase();
+    var bn = ((b.first_name || '') + ' ' + (b.last_name || '')).trim().toLowerCase();
+    return an < bn ? -1 : an > bn ? 1 : 0;
+  });
+
+  var selects = [
+    'rel-parent-select',
+    'rel-child-select',
+    'rel-spouse1-select',
+    'rel-spouse2-select'
+  ];
+
+  selects.forEach(function(selId) {
+    var sel = document.getElementById(selId);
+    var firstOption = sel.options[0];
+    sel.innerHTML = '';
+    sel.appendChild(firstOption);
+    sorted.forEach(function(p) {
+      var opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = personName(p.id);
+      sel.appendChild(opt);
+    });
+  });
+}
+
+function openRelModal(preselectedId) {
+  populatePersonSelects();
+  document.getElementById('rel-type').value = 'parent';
+  document.getElementById('rel-parent-fields').classList.remove('hidden');
+  document.getElementById('rel-spouse-fields').classList.add('hidden');
+  document.getElementById('rel-parent-select').value = preselectedId || '';
+  document.getElementById('rel-child-select').value = '';
+  document.getElementById('rel-spouse1-select').value = preselectedId || '';
+  document.getElementById('rel-spouse2-select').value = '';
+  document.getElementById('rel-marriage-date').value = '';
+  document.getElementById('rel-separation-date').value = '';
+  document.getElementById('rel-notes').value = '';
+  openModal('modal-rel');
+}
+
+function saveRelModal() {
+  var type = document.getElementById('rel-type').value;
+  var person1_id, person2_id, start_date, end_date;
+
+  if (type === 'parent') {
+    person1_id = parseInt(document.getElementById('rel-parent-select').value);
+    person2_id = parseInt(document.getElementById('rel-child-select').value);
+    if (!person1_id || !person2_id) {
+      showError('יש לבחור הורה וילד.');
+      return;
+    }
+    if (person1_id === person2_id) {
+      showError('ההורה והילד חייבים להיות אנשים שונים.');
+      return;
+    }
+    start_date = null;
+    end_date = null;
+  } else {
+    person1_id = parseInt(document.getElementById('rel-spouse1-select').value);
+    person2_id = parseInt(document.getElementById('rel-spouse2-select').value);
+    if (!person1_id || !person2_id) {
+      showError('יש לבחור שני אנשים.');
+      return;
+    }
+    if (person1_id === person2_id) {
+      showError('יש לבחור שני אנשים שונים.');
+      return;
+    }
+    start_date = document.getElementById('rel-marriage-date').value || null;
+    end_date = document.getElementById('rel-separation-date').value || null;
+  }
+
+  var notes = document.getElementById('rel-notes').value.trim() || null;
+
+  apiPost('/api/relationships', {
+    person1_id: person1_id,
+    person2_id: person2_id,
+    type: type,
+    start_date: start_date,
+    end_date: end_date,
+    notes: notes
+  }).then(function(data) {
+    if (data.error) { showError(data.error); return; }
+    closeModal('modal-rel');
+    refreshTree();
+  }).catch(function(err) {
+    showError('שגיאה בשמירת הקשר: ' + err.message);
+  });
+}
+
+// ============================================================
+// Search with autocomplete
+// ============================================================
+
+function setupSearch() {
+  var input = document.getElementById('search-input');
+  var dropdown = document.getElementById('search-dropdown');
+  var activeIdx = -1;
+
+  function closeDropdown() {
+    dropdown.classList.add('hidden');
+    dropdown.innerHTML = '';
+    activeIdx = -1;
+  }
+
+  function selectSearchPerson(person) {
+    input.value = '';
+    closeDropdown();
+    window.highlightSearch('');
+    // Open panel and center tree on the person
+    refreshTree().then(function() {
+      showPersonPanel(person.id);
+      if (window.centerOnPerson) window.centerOnPerson(person.id);
+    });
+  }
+
+  input.addEventListener('input', function() {
+    var term = input.value.trim();
+    window.highlightSearch(term);
+    activeIdx = -1;
+
+    if (!term) { closeDropdown(); return; }
+
+    var termL = term.toLowerCase();
+    var matches = state.people.filter(function(p) {
+      var full = ((p.first_name || '') + ' ' + (p.last_name || '')).trim().toLowerCase();
+      return full.indexOf(termL) !== -1;
+    }).slice(0, 8);
+
+    if (matches.length === 0) { closeDropdown(); return; }
+
+    dropdown.innerHTML = '';
+    dropdown.classList.remove('hidden');
+    matches.forEach(function(p, idx) {
+      var li = document.createElement('li');
+      li.className = 'search-dropdown-item';
+      li.textContent = personName(p.id);
+      if (p.is_deceased || p.death_date) li.textContent += ' ז"ל';
+      li.addEventListener('mousedown', function(e) {
+        e.preventDefault(); // keep focus on input briefly
+        selectSearchPerson(p);
+      });
+      dropdown.appendChild(li);
+    });
+    activeIdx = -1;
+  });
+
+  input.addEventListener('keydown', function(e) {
+    var items = dropdown.querySelectorAll('.search-dropdown-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      activeIdx = Math.min(activeIdx + 1, items.length - 1);
+      items.forEach(function(el, i) { el.classList.toggle('active', i === activeIdx); });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIdx = Math.max(activeIdx - 1, 0);
+      items.forEach(function(el, i) { el.classList.toggle('active', i === activeIdx); });
+    } else if (e.key === 'Enter') {
+      if (activeIdx >= 0 && items[activeIdx]) {
+        items[activeIdx].dispatchEvent(new MouseEvent('mousedown'));
+      }
+    } else if (e.key === 'Escape') {
+      closeDropdown();
+    }
+  });
+
+  input.addEventListener('blur', function() {
+    setTimeout(closeDropdown, 150);
+  });
+}
+
+// ============================================================
+// Upcoming Events Widget
+// ============================================================
+
+function refreshUpcomingWidget() {
+  var list = document.getElementById('upcoming-list');
+  if (!list) return;
+
+  var today = new Date();
+
+  function daysUntil(mmdd) {
+    var parts = mmdd.split('-');
+    var m = parseInt(parts[0], 10) - 1;
+    var d = parseInt(parts[1], 10);
+    var thisYear = new Date(today.getFullYear(), m, d);
+    var diff = Math.round((thisYear - today) / 86400000);
+    if (diff < 0) diff += 365;
+    return diff;
+  }
+
+  function getMMDD(dateStr) {
+    if (!dateStr) return null;
+    var p = dateStr.split('-');
+    if (p.length < 3) return null;
+    return p[1] + '-' + p[2];
+  }
+
+  var events = [];
+
+  state.people.forEach(function(p) {
+    var mmdd = getMMDD(p.birth_date);
+    if (mmdd) {
+      var days = daysUntil(mmdd);
+      if (days <= 30) events.push({ days: days, icon: '🎂', name: personName(p.id), sub: 'יום הולדת', id: p.id });
+    }
+    if (p.is_deceased || p.death_date) {
+      var dmmdd = getMMDD(p.death_date);
+      if (dmmdd) {
+        var ddays = daysUntil(dmmdd);
+        if (ddays <= 30) events.push({ days: ddays, icon: '🕯️', name: personName(p.id), sub: 'יארצייט', id: p.id });
+      }
+    }
+  });
+
+  state.relationships.forEach(function(r) {
+    if (r.type !== 'spouse' || !r.start_date) return;
+    var mmdd = getMMDD(r.start_date);
+    if (!mmdd) return;
+    var days = daysUntil(mmdd);
+    if (days <= 30) {
+      events.push({ days: days, icon: '💍', name: personName(r.person1_id) + ' ו' + personName(r.person2_id), sub: 'יום נישואין', id: r.person1_id });
+    }
+  });
+
+  events.sort(function(a, b) { return a.days - b.days; });
+
+  list.innerHTML = '';
+
+  if (events.length === 0) {
+    var empty = document.createElement('li');
+    empty.className = 'upcoming-empty';
+    empty.textContent = 'אין אירועים ב-30 הימים הקרובים';
+    list.appendChild(empty);
+    return;
+  }
+
+  events.forEach(function(ev) {
+    var li = document.createElement('li');
+    li.className = 'upcoming-item';
+    var daysLabel = ev.days === 0 ? 'היום!' : ev.days === 1 ? 'מחר' : 'בעוד ' + ev.days + ' ימים';
+    li.innerHTML =
+      '<span class="upcoming-item-icon">' + ev.icon + '</span>' +
+      '<div class="upcoming-item-info">' +
+        '<div class="upcoming-item-name">' + ev.name + '</div>' +
+        '<div class="upcoming-item-sub">' + ev.sub + '</div>' +
+      '</div>' +
+      '<span class="upcoming-item-days' + (ev.days === 0 ? ' today' : '') + '">' + daysLabel + '</span>';
+    if (ev.id) {
+      (function(pid) {
+        li.addEventListener('click', function() {
+          showPersonPanel(pid);
+          if (window.centerOnPerson) window.centerOnPerson(pid);
+        });
+      })(ev.id);
+    }
+    list.appendChild(li);
+  });
+}
+
+// ============================================================
+// Event Listeners Setup
+// ============================================================
+
+function setupEventListeners() {
+  // Add person buttons
+  document.getElementById('btn-add-person').addEventListener('click', openAddPersonModal);
+  var addFirst = document.getElementById('btn-add-first');
+  if (addFirst) addFirst.addEventListener('click', openAddPersonModal);
+
+  // Add relationship button
+  document.getElementById('btn-add-rel').addEventListener('click', function() {
+    if (state.people.length < 2) {
+      showError('נדרשים לפחות 2 אנשים להוספת קשר.');
+      return;
+    }
+    openRelModal();
+  });
+
+  // Person modal save
+  document.getElementById('btn-save-person').addEventListener('click', savePersonModal);
+
+  // Relationship modal save
+  document.getElementById('btn-save-rel').addEventListener('click', saveRelModal);
+
+  // Relationship type toggle — keep preselected person in the active fields
+  document.getElementById('rel-type').addEventListener('change', function() {
+    var type = this.value;
+    document.getElementById('rel-parent-fields').classList.toggle('hidden', type !== 'parent');
+    document.getElementById('rel-spouse-fields').classList.toggle('hidden', type !== 'spouse');
+    // Mirror preselected value across tabs
+    var preId = document.getElementById('rel-parent-select').value || document.getElementById('rel-spouse1-select').value;
+    if (preId) {
+      document.getElementById('rel-parent-select').value = preId;
+      document.getElementById('rel-spouse1-select').value = preId;
+    }
+  });
+
+  // Modal close buttons (data-modal attribute)
+  document.querySelectorAll('.modal-close, [data-modal]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var modalId = btn.getAttribute('data-modal');
+      if (modalId) closeModal(modalId);
+    });
+  });
+
+  // Close modal on overlay click
+  document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) {
+        overlay.classList.add('hidden');
+      }
+    });
+  });
+
+  // Panel close
+  document.getElementById('panel-close').addEventListener('click', closePersonPanel);
+
+  // Keyboard: Escape to close
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      // Close topmost modal
+      var modals = document.querySelectorAll('.modal-overlay:not(.hidden)');
+      if (modals.length > 0) {
+        modals[modals.length - 1].classList.add('hidden');
+      } else {
+        closePersonPanel();
+      }
+    }
+  });
+
+  // Enter in person modal
+  document.getElementById('inp-first-name').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') savePersonModal();
+  });
+  document.getElementById('inp-last-name').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') savePersonModal();
+  });
+}
+
+// ============================================================
+// Override selectPerson from tree.js
+// ============================================================
+
+window.selectPerson = function(id) {
+  showPersonPanel(id);
+};
+
+window.deselectPerson = function() {
+  closePersonPanel();
+};
+
+// ============================================================
+// Init
+// ============================================================
+
+document.addEventListener('DOMContentLoaded', function() {
+  setupEventListeners();
+  setupPhotoUpload();
+  setupSearch();
+
+  // Load initial data
+  apiGet('/api/tree').then(function(data) {
+    state.people = data.people || [];
+    state.relationships = data.relationships || [];
+    window.renderTree(state.people, state.relationships);
+    refreshUpcomingWidget();
+  }).catch(function(err) {
+    console.error('Failed to load tree data:', err);
+  });
+});
