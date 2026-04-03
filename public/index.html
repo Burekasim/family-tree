@@ -121,24 +121,25 @@
         <button class="modal-close" data-modal="modal-person">✕</button>
       </div>
       <div class="modal-body">
-        <!-- Photo Upload -->
-        <div class="photo-upload-area" id="photo-upload-area">
-          <img id="photo-preview" class="photo-preview hidden" src="" alt="">
-          <div id="photo-placeholder" class="photo-placeholder">
-            <span>📷</span>
-            <span>לחץ להעלאת תמונה</span>
+        <!-- Photo + Name row -->
+        <div class="photo-name-row">
+          <div class="photo-upload-area" id="photo-upload-area">
+            <img id="photo-preview" class="photo-preview hidden" src="" alt="">
+            <div id="photo-placeholder" class="photo-placeholder">
+              <span>📷</span>
+              <span>תמונה</span>
+            </div>
+            <input type="file" id="photo-file-input" accept="image/*" style="display:none">
           </div>
-          <input type="file" id="photo-file-input" accept="image/*" style="display:none">
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="inp-first-name">שם פרטי *</label>
-            <input type="text" id="inp-first-name" placeholder="שם פרטי" required>
-          </div>
-          <div class="form-group">
-            <label for="inp-last-name">שם משפחה</label>
-            <input type="text" id="inp-last-name" placeholder="שם משפחה">
+          <div class="name-fields">
+            <div class="form-group">
+              <label for="inp-first-name">שם פרטי *</label>
+              <input type="text" id="inp-first-name" placeholder="שם פרטי" required>
+            </div>
+            <div class="form-group">
+              <label for="inp-last-name">שם משפחה</label>
+              <input type="text" id="inp-last-name" placeholder="שם משפחה">
+            </div>
           </div>
         </div>
 
@@ -150,6 +151,12 @@
               <option value="M">זכר</option>
               <option value="F">נקבה</option>
             </select>
+          </div>
+          <div class="form-group form-check" style="display:flex;align-items:flex-end;padding-bottom:2px">
+            <label class="check-label">
+              <input type="checkbox" id="inp-deceased">
+              <span>נפטר/ה (ז"ל)</span>
+            </label>
           </div>
         </div>
 
@@ -164,16 +171,9 @@
           </div>
         </div>
 
-        <div class="form-group form-check">
-          <label class="check-label">
-            <input type="checkbox" id="inp-deceased">
-            <span>נפטר/ה (ז"ל)</span>
-          </label>
-        </div>
-
         <div class="form-group">
           <label for="inp-notes">הערות</label>
-          <textarea id="inp-notes" rows="3" placeholder="הערות על אדם זה…"></textarea>
+          <textarea id="inp-notes" rows="2" placeholder="הערות על אדם זה…"></textarea>
         </div>
 
         <div id="inp-parent-wrap" class="form-group">

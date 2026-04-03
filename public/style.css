@@ -390,17 +390,28 @@ body {
   gap: 12px;
 }
 
+/* ===== Photo + Name Row ===== */
+.photo-name-row {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+.name-fields { flex: 1; min-width: 0; }
+.name-fields .form-group { margin-bottom: 10px; }
+.name-fields .form-group:last-child { margin-bottom: 0; }
+
 /* ===== Photo Upload ===== */
 .photo-upload-area {
-  width: 100%;
-  height: 120px;
+  width: 88px;
+  height: 88px;
+  flex-shrink: 0;
   border: 2px dashed var(--border);
-  border-radius: 12px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  margin-bottom: 16px;
   overflow: hidden;
   position: relative;
   background: var(--bg);
@@ -411,11 +422,13 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 3px;
   color: var(--text-light);
-  font-size: 13px;
+  font-size: 11px;
+  text-align: center;
+  padding: 0 4px;
 }
-.photo-placeholder span:first-child { font-size: 28px; }
+.photo-placeholder span:first-child { font-size: 22px; }
 .photo-preview {
   width: 100%;
   height: 100%;
@@ -601,7 +614,7 @@ body {
   .modal-overlay { align-items: flex-end; padding: 0; }
   .modal {
     border-radius: 20px 20px 0 0;
-    max-height: 92vh;
+    max-height: 88vh;
     width: 100%;
     max-width: 100%;
   }
@@ -612,12 +625,32 @@ body {
     height: 4px;
     background: var(--border);
     border-radius: 2px;
-    margin: 12px auto 0;
+    margin: 10px auto 0;
   }
-  .modal-header { padding: 12px 16px; }
-  .modal-body { padding: 12px 16px; }
-  .modal-footer { padding: 12px 16px; }
-  .form-row { flex-direction: column; gap: 0; }
+  .modal-header { padding: 8px 16px 10px; }
+  .modal-header h2 { font-size: 16px; }
+  .modal-body { padding: 10px 14px; }
+  .modal-footer { padding: 10px 14px; gap: 8px; }
+  .modal-footer .btn { flex: 1; justify-content: center; }
+
+  /* Compact form on mobile */
+  .form-group { margin-bottom: 10px; }
+  .form-group label { font-size: 12px; margin-bottom: 3px; }
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    padding: 10px 10px;
+    font-size: 16px; /* prevent iOS zoom */
+    border-radius: 8px;
+  }
+  .form-group textarea { min-height: 52px; }
+  .form-row { gap: 8px; }
+
+  /* Photo + name row on mobile */
+  .photo-name-row { gap: 10px; margin-bottom: 10px; }
+  .photo-upload-area { width: 72px; height: 72px; }
+  .photo-placeholder { font-size: 10px; gap: 2px; }
+  .photo-placeholder span:first-child { font-size: 18px; }
 
   /* Zoom controls — bigger touch targets */
   .zoom-btn { width: 48px; height: 48px; font-size: 22px; border-radius: 14px; }
