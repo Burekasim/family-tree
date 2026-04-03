@@ -457,7 +457,7 @@ function _drawEdges(root, positions, people, relationships) {
     }
 
     // Create a unit key to avoid double-drawing
-    var unitKey = spouse ? [Math.min(id, spouse), Math.max(id, spouse)].join('-') : String(id);
+    var unitKey = spouse ? [id, spouse].sort().join('-') : String(id);
     if (processedParentUnits[unitKey]) return;
     processedParentUnits[unitKey] = true;
 
