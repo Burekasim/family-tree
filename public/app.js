@@ -14,8 +14,9 @@ var state = {
 // ============================================================
 
 function personById(id) {
+  var sid = String(id);
   for (var i = 0; i < state.people.length; i++) {
-    if (state.people[i].id === id || state.people[i].id === Number(id)) {
+    if (String(state.people[i].id) === sid) {
       return state.people[i];
     }
   }
@@ -58,12 +59,17 @@ function showError(msg) {
 // API helpers
 // ============================================================
 
+function _apiUrl(path) {
+  var base = (window.APP_CONFIG && window.APP_CONFIG.apiBase) || '';
+  return base + path;
+}
+
 function apiGet(url) {
-  return fetch(url).then(function(r) { return r.json(); });
+  return fetch(_apiUrl(url)).then(function(r) { return r.json(); });
 }
 
 function apiPost(url, data) {
-  return fetch(url, {
+  return fetch(_apiUrl(url), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
@@ -71,7 +77,7 @@ function apiPost(url, data) {
 }
 
 function apiPut(url, data) {
-  return fetch(url, {
+  return fetch(_apiUrl(url), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
@@ -79,7 +85,7 @@ function apiPut(url, data) {
 }
 
 function apiDelete(url) {
-  return fetch(url, { method: 'DELETE' }).then(function(r) { return r.json(); });
+  return fetch(_apiUrl(url), { method: 'DELETE' }).then(function(r) { return r.json(); });
 }
 
 // ============================================================
@@ -123,7 +129,7 @@ function showPersonPanel(id) {
   var initialsEl = document.getElementById('panel-initials');
 
   if (person.photo) {
-    photoEl.src = '/uploads/' + person.photo;
+    photoEl.src = person.photo.startsWith('http') ? person.photo : '/uploads/' + person.photo;
     photoEl.alt = personName(id);
     photoEl.classList.remove('hidden');
     initialsEl.style.display = 'none';
@@ -261,7 +267,7 @@ function showPersonPanel(id) {
     });
   }
 
-  var siblingIds = Object.keys(siblingSet).map(Number);
+  var siblingIds = Object.keys(siblingSet);
   siblingsSection.style.display = siblingIds.length > 0 ? '' : 'none';
   siblingIds.forEach(function(sid) {
     var li = document.createElement('li');
@@ -385,7 +391,7 @@ function openEditPersonModal(id) {
   var preview = document.getElementById('photo-preview');
   var placeholder = document.getElementById('photo-placeholder');
   if (person.photo) {
-    preview.src = '/uploads/' + person.photo;
+    preview.src = person.photo.startsWith('http') ? person.photo : '/uploads/' + person.photo;
     preview.classList.remove('hidden');
     placeholder.style.display = 'none';
   } else {
@@ -435,7 +441,7 @@ function savePersonModal() {
     state.editingPersonId = null;
 
     // If a parent was selected, create the relationship before refreshing
-    var parentId = !wasEditing && parseInt(document.getElementById('inp-parent').value);
+    var parentId = !wasEditing && document.getElementById('inp-parent').value;
     if (parentId && person.id) {
       apiPost('/api/relationships', {
         person1_id: parentId,
@@ -476,21 +482,45 @@ function setupPhotoUpload() {
     var file = fileInput.files[0];
     if (!file) return;
 
-    var formData = new FormData();
-    formData.append('photo', file);
+    var cfg = window.APP_CONFIG || {};
 
-    fetch('/api/upload', { method: 'POST', body: formData })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (data.error) { showError(data.error); return; }
-        state.photoFilename = data.filename;
-        preview.src = data.url;
-        preview.classList.remove('hidden');
-        placeholder.style.display = 'none';
-      })
-      .catch(function(err) {
-        showError('העלאה נכשלה: ' + err.message);
-      });
+    if (cfg.usePresignedUpload) {
+      // Presigned S3 PUT upload
+      apiPost('/api/upload-url', { filename: file.name, contentType: file.type })
+        .then(function(data) {
+          if (data.error) { showError(data.error); return; }
+          return fetch(data.uploadUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type },
+            body: file
+          }).then(function(r) {
+            if (!r.ok) throw new Error('Upload failed: ' + r.status);
+            state.photoFilename = data.photoUrl;
+            preview.src = data.photoUrl;
+            preview.classList.remove('hidden');
+            placeholder.style.display = 'none';
+          });
+        })
+        .catch(function(err) {
+          showError('העלאה נכשלה: ' + err.message);
+        });
+    } else {
+      // Local Express multipart upload (dev)
+      var formData = new FormData();
+      formData.append('photo', file);
+      fetch('/api/upload', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.error) { showError(data.error); return; }
+          state.photoFilename = data.filename;
+          preview.src = data.url;
+          preview.classList.remove('hidden');
+          placeholder.style.display = 'none';
+        })
+        .catch(function(err) {
+          showError('העלאה נכשלה: ' + err.message);
+        });
+    }
   });
 
   // Drag and drop
@@ -566,8 +596,8 @@ function saveRelModal() {
   var person1_id, person2_id, start_date, end_date;
 
   if (type === 'parent') {
-    person1_id = parseInt(document.getElementById('rel-parent-select').value);
-    person2_id = parseInt(document.getElementById('rel-child-select').value);
+    person1_id = document.getElementById('rel-parent-select').value;
+    person2_id = document.getElementById('rel-child-select').value;
     if (!person1_id || !person2_id) {
       showError('יש לבחור הורה וילד.');
       return;
@@ -579,8 +609,8 @@ function saveRelModal() {
     start_date = null;
     end_date = null;
   } else {
-    person1_id = parseInt(document.getElementById('rel-spouse1-select').value);
-    person2_id = parseInt(document.getElementById('rel-spouse2-select').value);
+    person1_id = document.getElementById('rel-spouse1-select').value;
+    person2_id = document.getElementById('rel-spouse2-select').value;
     if (!person1_id || !person2_id) {
       showError('יש לבחור שני אנשים.');
       return;
@@ -877,7 +907,47 @@ window.deselectPerson = function() {
 // Init
 // ============================================================
 
+// ============================================================
+// Password Gate
+// ============================================================
+
+function setupPasswordGate() {
+  var gate = document.getElementById('password-gate');
+  if (!gate) return;
+
+  var CORRECT = 'heymakarenea';
+
+  if (sessionStorage.getItem('ft_auth') === '1') {
+    gate.classList.add('hidden');
+    return;
+  }
+
+  var input = document.getElementById('password-input');
+  var errEl = document.getElementById('password-error');
+  var btn   = document.getElementById('password-submit');
+
+  function tryPassword() {
+    if (input.value === CORRECT) {
+      sessionStorage.setItem('ft_auth', '1');
+      gate.classList.add('hidden');
+    } else {
+      errEl.textContent = 'סיסמה שגויה, נסה שוב.';
+      input.classList.add('error');
+      input.value = '';
+      setTimeout(function() { input.classList.remove('error'); }, 400);
+      input.focus();
+    }
+  }
+
+  btn.addEventListener('click', tryPassword);
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') tryPassword();
+  });
+  input.focus();
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+  setupPasswordGate();
   setupEventListeners();
   setupPhotoUpload();
   setupSearch();

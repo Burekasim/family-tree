@@ -1,0 +1,8 @@
+node_modules/
+db/
+uploads/
+.env
+.aws-sam/
+samconfig.toml
+*.swp
+.DS_Store

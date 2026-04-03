@@ -8,6 +8,18 @@
 </head>
 <body>
 
+  <!-- Password Gate -->
+  <div id="password-gate">
+    <div class="password-box">
+      <div class="tree-icon">🌳</div>
+      <h1>עץ משפחה</h1>
+      <p>הזן סיסמה כדי להמשיך</p>
+      <input type="password" id="password-input" placeholder="סיסמה" autocomplete="current-password">
+      <div id="password-error"></div>
+      <button class="btn btn-primary" id="password-submit">כניסה</button>
+    </div>
+  </div>
+
   <!-- Top Bar -->
   <header class="topbar">
     <div class="topbar-left">
@@ -250,6 +262,7 @@
     <ul id="upcoming-list" class="upcoming-list"></ul>
   </div>
 
+  <script src="config.js"></script>
   <script src="tree.js"></script>
   <script src="app.js"></script>
 </body>
