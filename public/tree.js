@@ -120,165 +120,195 @@ function _computeLayout(people, relationships) {
   var parentsOf = graph.parentsOf;
   var childrenOf = graph.childrenOf;
   var spousesOf = graph.spousesOf;
-
   var ids = people.map(function(p) { return p.id; });
+
+  // ── Generation assignment (BFS) ──
   var generation = {};
   var visited = {};
-
-  // BFS from roots (no parents). Spouses get same generation.
   var roots = ids.filter(function(id) { return parentsOf[id].length === 0; });
 
-  // Handle disconnected: any unvisited node becomes a root
   function bfsFrom(startIds) {
     var queue = startIds.slice();
-    startIds.forEach(function(id) {
-      if (generation[id] === undefined) generation[id] = 0;
-    });
-
+    startIds.forEach(function(id) { if (generation[id] === undefined) generation[id] = 0; });
     while (queue.length > 0) {
       var cur = queue.shift();
       if (visited[cur]) continue;
       visited[cur] = true;
       var gen = generation[cur];
-
-      // Propagate to spouses (same generation)
       spousesOf[cur].forEach(function(sid) {
-        if (generation[sid] === undefined) {
-          generation[sid] = gen;
-          queue.push(sid);
-        }
+        if (generation[sid] === undefined) { generation[sid] = gen; queue.push(sid); }
       });
-
-      // Propagate to children (gen + 1)
       childrenOf[cur].forEach(function(cid) {
-        var proposed = gen + 1;
-        if (generation[cid] === undefined || generation[cid] < proposed) {
-          generation[cid] = proposed;
-          queue.push(cid);
-        }
+        var p = gen + 1;
+        if (generation[cid] === undefined || generation[cid] < p) { generation[cid] = p; queue.push(cid); }
       });
     }
   }
-
   if (roots.length > 0) bfsFrom(roots);
+  ids.forEach(function(id) { if (!visited[id]) { generation[id] = 0; bfsFrom([id]); } });
 
-  // Handle disconnected subgraphs
-  ids.forEach(function(id) {
-    if (!visited[id]) {
-      generation[id] = 0;
-      bfsFrom([id]);
-    }
-  });
-
-  // Reconcile spouse generations: spouses must be in the same generation (take max)
+  // Reconcile spouses to same generation
   var changed = true;
   while (changed) {
     changed = false;
     ids.forEach(function(id) {
       spousesOf[id].forEach(function(sid) {
-        var maxG = Math.max(generation[id], generation[sid]);
-        if (generation[id] < maxG) { generation[id] = maxG; changed = true; }
-        if (generation[sid] < maxG) { generation[sid] = maxG; changed = true; }
+        var m = Math.max(generation[id], generation[sid]);
+        if (generation[id] < m) { generation[id] = m; changed = true; }
+        if (generation[sid] < m) { generation[sid] = m; changed = true; }
       });
     });
   }
-
-  // Re-push children down so they are always at least parent_gen + 1
+  // Push children below parents
   changed = true;
   while (changed) {
     changed = false;
     ids.forEach(function(id) {
       childrenOf[id].forEach(function(cid) {
-        var minChildGen = generation[id] + 1;
-        if (generation[cid] < minChildGen) {
-          generation[cid] = minChildGen;
-          changed = true;
-        }
+        if (generation[cid] < generation[id] + 1) { generation[cid] = generation[id] + 1; changed = true; }
       });
     });
   }
 
-  // Group people by generation
-  var maxGen = 0;
-  ids.forEach(function(id) { if (generation[id] > maxGen) maxGen = generation[id]; });
+  // ── Build family units ──
+  // One unit per spouse-relationship (couple) + solo unit for everyone else.
+  // personToUnit[id] = the unit key where this person is a parent.
+  var families = {};      // key -> { parents:[ids], children:[ids] }
+  var personToUnit = {};  // id -> unit key
 
-  var byGen = {};
-  for (var g = 0; g <= maxGen; g++) byGen[g] = [];
-  ids.forEach(function(id) { byGen[generation[id]].push(id); });
-
-  // Within each generation create couples groups
-  function buildGroups(genIds) {
-    var grouped = {};
-    var groups = [];
-    genIds.forEach(function(id) {
-      if (grouped[id]) return;
-      grouped[id] = true;
-      var spouseInGen = null;
-      for (var i = 0; i < spousesOf[id].length; i++) {
-        var sid = spousesOf[id][i];
-        if (generation[sid] === generation[id] && !grouped[sid]) {
-          spouseInGen = sid;
-          break;
-        }
-      }
-      if (spouseInGen !== null) {
-        grouped[spouseInGen] = true;
-        groups.push([id, spouseInGen]);
-      } else {
-        groups.push([id]);
-      }
+  relationships.forEach(function(r) {
+    if (r.type !== 'spouse') return;
+    var a = r.person1_id, b = r.person2_id;
+    var key = Math.min(a, b) + ':' + Math.max(a, b);
+    if (families[key]) return;
+    // Shared children: any child whose parent list contains both a and b
+    var shared = childrenOf[a].filter(function(cid) {
+      return parentsOf[cid].indexOf(b) !== -1;
     });
-    return groups;
-  }
-
-  // Sort groups by parent x-position
-  function avgParentX(group, pos) {
-    var parentXs = [];
-    group.forEach(function(id) {
-      parentsOf[id].forEach(function(pid) {
-        if (pos[pid] !== undefined) {
-          parentXs.push(pos[pid].x + CARD_W / 2);
-        }
-      });
+    // Also pick up children listed under b but not a (can happen with manual edits)
+    childrenOf[b].forEach(function(cid) {
+      if (parentsOf[cid].indexOf(a) !== -1 && shared.indexOf(cid) === -1) shared.push(cid);
     });
-    if (parentXs.length === 0) return Infinity;
-    return parentXs.reduce(function(a, b) { return a + b; }, 0) / parentXs.length;
-  }
+    families[key] = { parents: [Math.min(a, b), Math.max(a, b)], children: shared };
+    if (!personToUnit[a]) personToUnit[a] = key;
+    if (!personToUnit[b]) personToUnit[b] = key;
+  });
 
+  // Solo units for people not yet in a couple unit
+  ids.forEach(function(id) {
+    if (personToUnit[id]) return;
+    var key = 'solo:' + id;
+    families[key] = { parents: [id], children: childrenOf[id].slice() };
+    personToUnit[id] = key;
+  });
+
+  // ── Subtree widths (bottom-up) ──
+  // Width of a unit = max(parents_width, sum(children_unit_widths + gaps))
+  var widthCache = {};
+  function subtreeW(key) {
+    if (widthCache[key] !== undefined) return widthCache[key];
+    widthCache[key] = 0; // cycle guard
+    var fam = families[key];
+    if (!fam) return CARD_W;
+    var parW = fam.parents.length === 2 ? (2 * CARD_W + COUPLE_GAP) : CARD_W;
+    // Unique child unit keys
+    var childKeys = [];
+    var seen = {};
+    fam.children.forEach(function(cid) {
+      var ck = personToUnit[cid];
+      if (!ck || ck === key || seen[ck]) return;
+      seen[ck] = true;
+      childKeys.push(ck);
+    });
+    if (childKeys.length === 0) { widthCache[key] = parW; return parW; }
+    var cTotal = childKeys.reduce(function(s, ck) { return s + subtreeW(ck) + H_GAP; }, 0) - H_GAP;
+    widthCache[key] = Math.max(parW, cTotal);
+    return widthCache[key];
+  }
+  Object.keys(families).forEach(subtreeW);
+
+  // ── Assign positions (top-down) ──
   var positions = {};
+  var placed = {};
 
-  // Process generation by generation
-  for (var gen = 0; gen <= maxGen; gen++) {
-    var genIds = byGen[gen];
-    var groups = buildGroups(genIds);
+  function placeUnit(key, leftX) {
+    if (placed[key]) return;
+    placed[key] = true;
+    var fam = families[key];
+    if (!fam) return;
+    var totalW = subtreeW(key);
+    var parW = fam.parents.length === 2 ? (2 * CARD_W + COUPLE_GAP) : CARD_W;
+    var py = generation[fam.parents[0]] * (CARD_H + V_GAP) + 40;
 
-    // Sort: groups with parents first (by avg parent x), then orphans
-    groups.sort(function(a, b) {
-      var ax = avgParentX(a, positions);
-      var bx = avgParentX(b, positions);
-      return ax - bx;
+    // Unique child unit keys
+    var childKeys = [];
+    var seenCK = {};
+    fam.children.forEach(function(cid) {
+      var ck = personToUnit[cid];
+      if (!ck || ck === key || seenCK[ck]) return;
+      seenCK[ck] = true;
+      childKeys.push(ck);
     });
 
-    var curX = 40;
-    var y = gen * (CARD_H + V_GAP) + 40;
+    var parentsLeft;
 
-    groups.forEach(function(group) {
-      var groupWidth = group.length === 2 ? (2 * CARD_W + COUPLE_GAP) : CARD_W;
-      // Try to center this group under its parents; fall back to curX if no space
-      var parentAvgX = avgParentX(group, positions);
-      var idealLeft = parentAvgX !== Infinity ? Math.round(parentAvgX - groupWidth / 2) : curX;
-      var startX = Math.max(curX, idealLeft);
+    if (childKeys.length > 0) {
+      var cTotal = childKeys.reduce(function(s, ck) { return s + subtreeW(ck) + H_GAP; }, 0) - H_GAP;
+      var cx = leftX + Math.round((totalW - cTotal) / 2);
+      childKeys.forEach(function(ck) {
+        if (!placed[ck]) placeUnit(ck, cx);
+        cx += subtreeW(ck) + H_GAP;
+      });
 
-      if (group.length === 2) {
-        positions[group[0]] = { x: startX, y: y };
-        positions[group[1]] = { x: startX + CARD_W + COUPLE_GAP, y: y };
-        curX = startX + 2 * CARD_W + COUPLE_GAP + H_GAP;
+      // Center parents above the span of placed children
+      var childCenters = fam.children
+        .filter(function(cid) { return positions[cid]; })
+        .map(function(cid) { return positions[cid].x + CARD_W / 2; });
+
+      if (childCenters.length > 0) {
+        var midX = (Math.min.apply(null, childCenters) + Math.max.apply(null, childCenters)) / 2;
+        parentsLeft = Math.round(midX - parW / 2);
       } else {
-        positions[group[0]] = { x: startX, y: y };
-        curX = startX + CARD_W + H_GAP;
+        parentsLeft = leftX + Math.round((totalW - parW) / 2);
+      }
+    } else {
+      parentsLeft = leftX + Math.round((totalW - parW) / 2);
+    }
+
+    fam.parents.forEach(function(pid, i) {
+      if (!positions[pid]) {
+        positions[pid] = { x: parentsLeft + i * (CARD_W + COUPLE_GAP), y: py };
       }
     });
   }
+
+  // Place root families (all parents have no parents)
+  var curX = 40;
+  var famKeys = Object.keys(families).sort(function(a, b) {
+    return (generation[families[a].parents[0]] || 0) - (generation[families[b].parents[0]] || 0);
+  });
+  famKeys.forEach(function(key) {
+    if (placed[key]) return;
+    var fam = families[key];
+    if (!fam.parents.every(function(pid) { return parentsOf[pid].length === 0; })) return;
+    placeUnit(key, curX);
+    curX += subtreeW(key) + H_GAP;
+  });
+
+  // Any remaining unplaced families
+  famKeys.forEach(function(key) {
+    if (placed[key]) return;
+    placeUnit(key, curX);
+    curX += subtreeW(key) + H_GAP;
+  });
+
+  // Fallback: individual stragglers
+  ids.forEach(function(id) {
+    if (!positions[id]) {
+      positions[id] = { x: curX, y: generation[id] * (CARD_H + V_GAP) + 40 };
+      curX += CARD_W + H_GAP;
+    }
+  });
 
   return positions;
 }
@@ -404,25 +434,42 @@ function _drawEdges(root, positions, people, relationships) {
       anchorX = pos.x + CARD_W / 2;
     }
 
-    // Smooth bezier curve from parent anchor to each child's top-center.
-    // Control points sit at the vertical midpoint, horizontally aligned with
-    // each endpoint — creates a clear S-curve per connection with no shared bars.
+    // Junction-bar pattern: short vertical stem → horizontal bar across
+    // all children → short drops to each child card.
+    // A filled dot at the junction marks the dedicated family connection point.
+    var childXs = unitChildren.map(function(cid) { return positions[cid].x + CARD_W / 2; });
+    var minCX = Math.min.apply(null, childXs);
+    var maxCX = Math.max.apply(null, childXs);
+    var junctionY = parentBottom + Math.round(V_GAP * 0.45);
+
+    // Stem: parent anchor → junction
+    edgeGroup.appendChild(_svgEl('line', {
+      x1: anchorX, y1: parentBottom, x2: anchorX, y2: junctionY,
+      stroke: '#5b8dee', 'stroke-width': 2
+    }));
+
+    // Horizontal bar spanning all children (and parent anchor if outside)
+    var barX1 = Math.min(anchorX, minCX);
+    var barX2 = Math.max(anchorX, maxCX);
+    edgeGroup.appendChild(_svgEl('line', {
+      x1: barX1, y1: junctionY, x2: barX2, y2: junctionY,
+      stroke: '#5b8dee', 'stroke-width': 2
+    }));
+
+    // Junction dot — the dedicated connection marker
+    edgeGroup.appendChild(_svgEl('circle', {
+      cx: anchorX, cy: junctionY, r: 4,
+      fill: '#5b8dee', stroke: 'none'
+    }));
+
+    // Drops from bar to each child
     unitChildren.forEach(function(cid) {
       var cpos = positions[cid];
-      var cCenterX = cpos.x + CARD_W / 2;
-      var childTop = cpos.y;
-      var midY = Math.round((parentBottom + childTop) / 2);
-
-      var path = _svgEl('path', {
-        d: 'M ' + anchorX + ',' + parentBottom +
-           ' C ' + anchorX + ',' + midY +
-           ' ' + cCenterX + ',' + midY +
-           ' ' + cCenterX + ',' + childTop,
-        stroke: '#5b8dee',
-        'stroke-width': 2,
-        fill: 'none'
-      });
-      edgeGroup.appendChild(path);
+      var ccx = cpos.x + CARD_W / 2;
+      edgeGroup.appendChild(_svgEl('line', {
+        x1: ccx, y1: junctionY, x2: ccx, y2: cpos.y,
+        stroke: '#5b8dee', 'stroke-width': 2
+      }));
     });
   });
 
