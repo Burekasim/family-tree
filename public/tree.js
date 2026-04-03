@@ -404,36 +404,25 @@ function _drawEdges(root, positions, people, relationships) {
       anchorX = pos.x + CARD_W / 2;
     }
 
-    var junctionY = parentBottom + V_GAP / 2;
-
-    // Short vertical from parent anchor down to junction level
-    var vLine = _svgEl('line', {
-      x1: anchorX, y1: parentBottom,
-      x2: anchorX, y2: junctionY,
-      stroke: '#5b8dee', 'stroke-width': 2
-    });
-    edgeGroup.appendChild(vLine);
-
-    // Individual elbow connector per child: horizontal from anchor → child, then drop down
+    // Smooth bezier curve from parent anchor to each child's top-center.
+    // Control points sit at the vertical midpoint, horizontally aligned with
+    // each endpoint — creates a clear S-curve per connection with no shared bars.
     unitChildren.forEach(function(cid) {
       var cpos = positions[cid];
       var cCenterX = cpos.x + CARD_W / 2;
+      var childTop = cpos.y;
+      var midY = Math.round((parentBottom + childTop) / 2);
 
-      // Horizontal segment at junctionY from parent anchor to child center
-      var hLine = _svgEl('line', {
-        x1: anchorX, y1: junctionY,
-        x2: cCenterX, y2: junctionY,
-        stroke: '#5b8dee', 'stroke-width': 2
+      var path = _svgEl('path', {
+        d: 'M ' + anchorX + ',' + parentBottom +
+           ' C ' + anchorX + ',' + midY +
+           ' ' + cCenterX + ',' + midY +
+           ' ' + cCenterX + ',' + childTop,
+        stroke: '#5b8dee',
+        'stroke-width': 2,
+        fill: 'none'
       });
-      edgeGroup.appendChild(hLine);
-
-      // Vertical drop from junctionY to child top
-      var dropLine = _svgEl('line', {
-        x1: cCenterX, y1: junctionY,
-        x2: cCenterX, y2: cpos.y,
-        stroke: '#5b8dee', 'stroke-width': 2
-      });
-      edgeGroup.appendChild(dropLine);
+      edgeGroup.appendChild(path);
     });
   });
 
