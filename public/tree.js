@@ -1,11 +1,11 @@
 // ===== tree.js — Layout + SVG Rendering =====
 // No ES modules. Global functions only.
 
-var CARD_W = 185;
-var CARD_H = 100;
-var COUPLE_GAP = 18;
-var H_GAP = 60;
-var V_GAP = 150;
+var CARD_W = 260;
+var CARD_H = 130;
+var COUPLE_GAP = 24;
+var H_GAP = 70;
+var V_GAP = 180;
 
 var SVG_NS = 'http://www.w3.org/2000/svg';
 var XLINK_NS = 'http://www.w3.org/1999/xlink';
@@ -611,8 +611,8 @@ function _drawCards(root, positions, people) {
     var midX = x + CARD_W / 2;
 
     // Photo: circular, top-center, so name can use full width below it
-    var photoR = 24;
-    var photoCY = y + photoR + 8; // 8px top margin
+    var photoR = 30;
+    var photoCY = y + photoR + 10; // 10px top margin
 
     if (person.photo) {
       var clipId = 'clip-' + id;
@@ -634,9 +634,9 @@ function _drawCards(root, positions, people) {
         fill: 'none', stroke: strokeColor, 'stroke-width': 1.5
       }));
     } else {
-      // Small gender-color dot, top-left
+      // Gender-color dot, top-left
       g.appendChild(_svgEl('circle', {
-        cx: x + 14, cy: y + 14, r: 6,
+        cx: x + 16, cy: y + 16, r: 7,
         fill: _initialsCircleFill(person.gender),
         stroke: strokeColor, 'stroke-width': 1.5
       }));
@@ -645,9 +645,9 @@ function _drawCards(root, positions, people) {
     // ז"ל — top-right corner
     if (person.is_deceased || person.death_date) {
       var zlText = _svgEl('text', {
-        x: x + CARD_W - 6, y: y + 14,
+        x: x + CARD_W - 8, y: y + 16,
         'text-anchor': 'end', 'dominant-baseline': 'central',
-        'font-size': '10', 'font-weight': '600', fill: '#718096',
+        'font-size': '12', 'font-weight': '600', fill: '#718096',
         style: 'user-select:none;pointer-events:none'
       });
       zlText.textContent = 'ז"ל';
@@ -655,15 +655,14 @@ function _drawCards(root, positions, people) {
     }
 
     // Name — always centered, full card width
-    // When photo present, sits below photo; otherwise sits in upper half
-    var nameY = person.photo ? (photoCY + photoR + 12) : (y + 44);
+    var nameY = person.photo ? (photoCY + photoR + 14) : (y + 56);
     var nameText = _svgEl('text', {
       x: midX, y: nameY,
-      'font-size': '13', 'font-weight': '600',
+      'font-size': '15', 'font-weight': '700',
       'text-anchor': 'middle', fill: '#2d3748',
       style: 'user-select:none;pointer-events:none'
     });
-    nameText.textContent = _truncate(fullName, 22);
+    nameText.textContent = _truncate(fullName, 26);
     g.appendChild(nameText);
 
     // Birth-death dates
@@ -680,8 +679,8 @@ function _drawCards(root, positions, people) {
 
     if (dateStr) {
       var dateText = _svgEl('text', {
-        x: midX, y: nameY + 16,
-        'font-size': '11', 'text-anchor': 'middle', fill: '#718096',
+        x: midX, y: nameY + 18,
+        'font-size': '12', 'text-anchor': 'middle', fill: '#718096',
         style: 'user-select:none;pointer-events:none'
       });
       dateText.textContent = dateStr;
@@ -691,11 +690,11 @@ function _drawCards(root, positions, people) {
     // Notes preview
     if (person.notes) {
       var notesText = _svgEl('text', {
-        x: midX, y: nameY + 30,
-        'font-size': '10', 'text-anchor': 'middle', fill: '#a0aec0',
+        x: midX, y: nameY + 34,
+        'font-size': '11', 'text-anchor': 'middle', fill: '#a0aec0',
         style: 'user-select:none;pointer-events:none'
       });
-      notesText.textContent = _truncate(person.notes, 22);
+      notesText.textContent = _truncate(person.notes, 28);
       g.appendChild(notesText);
     }
 
@@ -777,31 +776,25 @@ function _centerTree() {
   if (Object.keys(_positions).length === 0) return;
   var svg = document.getElementById('tree-svg');
   var svgW = svg.clientWidth || window.innerWidth;
-  var svgH = (svg.clientHeight || window.innerHeight) - 60; // minus topbar
+  var svgH = (svg.clientHeight || window.innerHeight) - 60;
 
-  var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  var minX = Infinity, maxX = -Infinity, minY = Infinity;
   for (var pid in _positions) {
     var pos = _positions[pid];
     if (pos.x < minX) minX = pos.x;
     if (pos.x + CARD_W > maxX) maxX = pos.x + CARD_W;
     if (pos.y < minY) minY = pos.y;
-    if (pos.y + CARD_H > maxY) maxY = pos.y + CARD_H;
   }
 
   var treeW = maxX - minX;
-  var treeH = maxY - minY;
 
-  // Fit scale so tree fills ~80% of viewport
-  var fitScale = Math.min(
-    (svgW * 0.9) / treeW,
-    (svgH * 0.9) / treeH,
-    1.0
-  );
-  _scale = Math.max(0.15, fitScale);
+  // Scale to fit the width at a readable zoom — never smaller than 0.35
+  var fitScale = Math.min((svgW * 0.88) / treeW, 0.8);
+  _scale = Math.max(0.35, fitScale);
 
-  // Center in viewport
+  // Center horizontally, anchor to top of tree
   _pan.x = (svgW - treeW * _scale) / 2 - minX * _scale;
-  _pan.y = (svgH - treeH * _scale) / 2 - minY * _scale;
+  _pan.y = 50 - minY * _scale;
 }
 
 function _applyTransform() {
