@@ -88,6 +88,14 @@ jobs:
           };
           CONFIGEOF
 
+      - name: Inject cache-bust version into index.html
+        run: |
+          VERSION=$(git rev-parse --short HEAD)
+          sed -i "s/href=\"style\.css\"/href=\"style.css?v=$VERSION\"/" public/index.html
+          sed -i "s/src=\"config\.js\"/src=\"config.js?v=$VERSION\"/" public/index.html
+          sed -i "s/src=\"tree\.js\"/src=\"tree.js?v=$VERSION\"/" public/index.html
+          sed -i "s/src=\"app\.js\"/src=\"app.js?v=$VERSION\"/" public/index.html
+
       - name: Sync frontend to S3
         id: sync
         run: |
