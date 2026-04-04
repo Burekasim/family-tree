@@ -159,10 +159,10 @@ function showPersonPanel(id) {
   // Gender badge
   var badge = document.getElementById('panel-gender');
   badge.className = 'gender-badge';
-  var genderLabels = { M: 'זכר', F: 'נקבה', Other: 'אחר' };
-  badge.textContent = genderLabels[person.gender] || 'אחר';
-  var genderClasses = { M: 'male', F: 'female', Other: 'other' };
-  badge.classList.add(genderClasses[person.gender] || 'other');
+  var genderLabels = { M: 'זכר', F: 'נקבה' };
+  badge.textContent = genderLabels[person.gender] || 'זכר';
+  var genderClasses = { M: 'male', F: 'female' };
+  badge.classList.add(genderClasses[person.gender] || 'male');
 
   // Dates
   var datesEl = document.getElementById('panel-dates');
@@ -407,7 +407,7 @@ function openAddPersonModal(preselectedParentId) {
   document.getElementById('modal-person-title').textContent = 'הוסף אדם';
   document.getElementById('inp-first-name').value = '';
   document.getElementById('inp-last-name').value = '';
-  document.getElementById('inp-gender').value = 'Other';
+  document.getElementById('inp-gender').value = 'M';
   document.getElementById('inp-birth-date').value = '';
   document.getElementById('inp-death-date').value = '';
   document.getElementById('inp-deceased').checked = false;
@@ -438,7 +438,7 @@ function openEditPersonModal(id) {
   document.getElementById('modal-person-title').textContent = 'ערוך אדם';
   document.getElementById('inp-first-name').value = person.first_name || '';
   document.getElementById('inp-last-name').value = person.last_name || '';
-  document.getElementById('inp-gender').value = person.gender || 'Other';
+  document.getElementById('inp-gender').value = (person.gender === 'F') ? 'F' : 'M';
   document.getElementById('inp-birth-date').value = person.birth_date || '';
   document.getElementById('inp-death-date').value = person.death_date || '';
   document.getElementById('inp-deceased').checked = !!(person.is_deceased || person.death_date);

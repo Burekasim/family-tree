@@ -511,7 +511,9 @@ function _drawEdges(root, positions, people, relationships) {
     var childXs = unitChildren.map(function(cid) { return positions[cid].x + CARD_W / 2; });
     var minCX = Math.min.apply(null, childXs);
     var maxCX = Math.max.apply(null, childXs);
-    var junctionY = parentBottom + Math.round(V_GAP * 0.45);
+    // Couple units junction sits at 38% of the gap; solo "extra" children
+    // (drawn separately below) will use 62% — the two bars never collide
+    var junctionY = parentBottom + Math.round(V_GAP * 0.38);
 
     // Invisible fat hit area on the stem for easier clicking
     unitGroup.appendChild(_svgEl('line', {
@@ -523,8 +525,8 @@ function _drawEdges(root, positions, people, relationships) {
       stroke: edgeColor, 'stroke-width': 2
     }));
 
-    var barX1 = Math.min(anchorX, minCX);
-    var barX2 = Math.max(anchorX, maxCX);
+    var barX1 = unitChildren.length > 1 ? Math.min(minCX, anchorX) : anchorX;
+    var barX2 = unitChildren.length > 1 ? Math.max(maxCX, anchorX) : anchorX;
     unitGroup.appendChild(_svgEl('line', {
       x1: barX1, y1: junctionY, x2: barX2, y2: junctionY,
       stroke: edgeColor, 'stroke-width': 2
@@ -574,7 +576,7 @@ function _drawEdges(root, positions, people, relationships) {
         var soloChildXs = soloChildren.map(function(cid) { return positions[cid].x + CARD_W / 2; });
         var soloMinCX = Math.min.apply(null, soloChildXs);
         var soloMaxCX = Math.max.apply(null, soloChildXs);
-        var soloJunctionY = parentBottom + Math.round(V_GAP * 0.45);
+        var soloJunctionY = parentBottom + Math.round(V_GAP * 0.62);
 
         soloGroup.appendChild(_svgEl('line', {
           x1: soloAnchorX, y1: parentBottom, x2: soloAnchorX, y2: soloJunctionY,
@@ -584,8 +586,8 @@ function _drawEdges(root, positions, people, relationships) {
           x1: soloAnchorX, y1: parentBottom, x2: soloAnchorX, y2: soloJunctionY,
           stroke: edgeColor, 'stroke-width': 2
         }));
-        var soloBarX1 = Math.min(soloAnchorX, soloMinCX);
-        var soloBarX2 = Math.max(soloAnchorX, soloMaxCX);
+        var soloBarX1 = soloChildren.length > 1 ? Math.min(soloMinCX, soloAnchorX) : soloAnchorX;
+        var soloBarX2 = soloChildren.length > 1 ? Math.max(soloMaxCX, soloAnchorX) : soloAnchorX;
         soloGroup.appendChild(_svgEl('line', {
           x1: soloBarX1, y1: soloJunctionY, x2: soloBarX2, y2: soloJunctionY,
           stroke: edgeColor, 'stroke-width': 2
