@@ -480,6 +480,36 @@ function openEditPersonModal(id) {
   document.getElementById('inp-parent-wrap').style.display = 'none';
   document.getElementById('inp-spouse-wrap').style.display = 'none';
 
+  // Show marriage dates for existing spouses
+  var spouseRels = state.relationships.filter(function(r) {
+    return r.type === 'spouse' && (r.person1_id === id || r.person2_id === id);
+  });
+  var datesWrap = document.getElementById('inp-spouse-dates-wrap');
+  var datesList = document.getElementById('inp-spouse-dates-list');
+  datesList.innerHTML = '';
+  if (spouseRels.length > 0) {
+    spouseRels.forEach(function(rel) {
+      var spouseId = rel.person1_id === id ? rel.person2_id : rel.person1_id;
+      var spouse = personById(spouseId);
+      var spouseName = spouse ? ((spouse.first_name || '') + ' ' + (spouse.last_name || '')).trim() : spouseId;
+      var row = document.createElement('div');
+      row.className = 'form-row';
+      row.innerHTML =
+        '<div class="form-group" style="flex:1">' +
+          '<label>תאריך נישואין עם ' + spouseName + '</label>' +
+          '<input type="date" data-rel-id="' + rel.id + '" data-field="start_date" value="' + (rel.start_date || '') + '">' +
+        '</div>' +
+        '<div class="form-group" style="flex:1">' +
+          '<label>תאריך פרידה</label>' +
+          '<input type="date" data-rel-id="' + rel.id + '" data-field="end_date" value="' + (rel.end_date || '') + '">' +
+        '</div>';
+      datesList.appendChild(row);
+    });
+    datesWrap.style.display = '';
+  } else {
+    datesWrap.style.display = 'none';
+  }
+
   openModal('modal-person');
   document.getElementById('inp-first-name').focus();
 }
@@ -511,11 +541,31 @@ function savePersonModal() {
     promise = apiPost('/api/people', data);
   }
 
+  // Collect spouse date changes (only visible when editing)
+  var spouseDateUpdates = [];
+  document.querySelectorAll('#inp-spouse-dates-list input[data-rel-id]').forEach(function(inp) {
+    spouseDateUpdates.push({ relId: inp.dataset.relId, field: inp.dataset.field, value: inp.value || null });
+  });
+
   promise.then(function(person) {
     if (person.error) { showError(person.error); return; }
     closeModal('modal-person');
     var wasEditing = state.editingPersonId;
     state.editingPersonId = null;
+
+    // Save spouse date changes
+    var relUpdates = {};
+    spouseDateUpdates.forEach(function(u) {
+      if (!relUpdates[u.relId]) relUpdates[u.relId] = {};
+      relUpdates[u.relId][u.field] = u.value;
+    });
+    var relSavePromises = Object.keys(relUpdates).map(function(relId) {
+      return fetch('/api/relationships/' + relId, {
+        method: 'PUT',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, _authHeaders()),
+        body: JSON.stringify(relUpdates[relId])
+      });
+    });
 
     // If a parent or spouse was selected, create the relationships before refreshing
     var parentId = !wasEditing && document.getElementById('inp-parent').value;
@@ -535,9 +585,10 @@ function savePersonModal() {
         type: 'spouse'
       }));
     }
-    if (relPromises.length > 0) {
-      Promise.all(relPromises).then(function() {
-        refreshTree().then(function() { showPersonPanel(person.id); });
+    var allSavePromises = relPromises.concat(relSavePromises);
+    if (allSavePromises.length > 0) {
+      Promise.all(allSavePromises).then(function() {
+        refreshTree().then(function() { showPersonPanel(person.id || wasEditing); });
       });
     } else {
       refreshTree().then(function() {

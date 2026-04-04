@@ -183,6 +183,18 @@ exports.handler = async (event) => {
       return respond(200, item);
     }
 
+    // PUT /api/relationships/:id
+    const putRelMatch = path.match(/^\/api\/relationships\/([^/]+)$/);
+    if (method === 'PUT' && putRelMatch) {
+      const id  = putRelMatch[1];
+      const res = await dynamo.send(new GetCommand({ TableName: RELS_TABLE, Key: { id } }));
+      if (!res.Item) return respond(404, { error: 'Relationship not found' });
+      const d       = JSON.parse(event.body || '{}');
+      const updated = strip({ ...res.Item, ...d, id });
+      await dynamo.send(new PutCommand({ TableName: RELS_TABLE, Item: updated }));
+      return respond(200, updated);
+    }
+
     // DELETE /api/relationships/:id
     const delRelMatch = path.match(/^\/api\/relationships\/([^/]+)$/);
     if (method === 'DELETE' && delRelMatch) {
