@@ -18,7 +18,7 @@ Globals:
   Function:
     Runtime: nodejs18.x
     Timeout: 15
-    MemorySize: 256
+    MemorySize: 512
     Environment:
       Variables:
         PEOPLE_TABLE: !Ref PeopleTable
@@ -114,6 +114,11 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /api/{proxy+}
             Method: ANY
+        Warming:
+          Type: Schedule
+          Properties:
+            Schedule: rate(5 minutes)
+            Input: '{"source":"family-tree-warming"}'
 
   # ── API Gateway HTTP API ────────────────────────────────────
   HttpApi:

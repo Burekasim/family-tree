@@ -12,6 +12,17 @@ const RELS_TABLE    = process.env.RELS_TABLE;
 const PHOTOS_BUCKET = process.env.PHOTOS_BUCKET;
 const PHOTOS_URL    = process.env.PHOTOS_URL;
 const API_TOKEN     = process.env.API_TOKEN;
+const CACHE_TTL_MS  = 60_000; // 60 s safety expiry
+
+// ── In-memory cache (lives for the container lifetime) ───────
+let _cache = { people: null, rels: null, ts: 0 };
+
+function _cacheValid() {
+  return _cache.ts > 0 && (Date.now() - _cache.ts) < CACHE_TTL_MS;
+}
+function _invalidate() {
+  _cache = { people: null, rels: null, ts: 0 };
+}
 
 // ── Helpers ──────────────────────────────────────────────────
 function respond(status, body) {
@@ -44,9 +55,22 @@ async function scanRels() {
   return (r.Items || []).sort((a, b) => (a.created_at > b.created_at ? 1 : -1));
 }
 
+// Returns both tables from cache when possible, fetches and warms cache otherwise
+async function getTree() {
+  if (_cacheValid() && _cache.people && _cache.rels) {
+    return { people: _cache.people, rels: _cache.rels };
+  }
+  const [people, rels] = await Promise.all([scanPeople(), scanRels()]);
+  _cache = { people, rels, ts: Date.now() };
+  return { people, rels };
+}
+
 // ── Handler ──────────────────────────────────────────────────
 exports.handler = async (event) => {
-  const method = event.requestContext.http.method;
+  // EventBridge warming ping — return immediately to keep the container alive
+  if (event.source === 'family-tree-warming') return { statusCode: 200, body: 'warm' };
+
+  const method = event.requestContext?.http?.method;
   const path   = event.rawPath || '';
 
   if (method === 'OPTIONS') return respond(200, {});
@@ -57,8 +81,9 @@ exports.handler = async (event) => {
     if (method === 'POST' && path === '/api/auth') {
       const { lastName } = JSON.parse(event.body || '{}');
       if (!lastName) return respond(400, { error: 'lastName required' });
-      const r = await dynamo.send(new ScanCommand({ TableName: PEOPLE_TABLE }));
-      const found = (r.Items || []).some(p =>
+      // Use cache to avoid an extra scan on every login
+      const { people } = await getTree();
+      const found = people.some(p =>
         (p.last_name || '').trim().toLowerCase() === lastName.trim().toLowerCase()
       );
       if (!found) return respond(401, { error: 'שם משפחה לא נמצא' });
@@ -73,7 +98,7 @@ exports.handler = async (event) => {
 
     // GET /api/tree
     if (method === 'GET' && path === '/api/tree') {
-      const [people, relationships] = await Promise.all([scanPeople(), scanRels()]);
+      const { people, rels: relationships } = await getTree();
       return respond(200, { people, relationships });
     }
 
@@ -93,6 +118,7 @@ exports.handler = async (event) => {
         created_at:  new Date().toISOString(),
       });
       await dynamo.send(new PutCommand({ TableName: PEOPLE_TABLE, Item: item }));
+      _invalidate();
       return respond(200, item);
     }
 
@@ -108,6 +134,7 @@ exports.handler = async (event) => {
         is_deceased: (d.is_deceased != null ? d.is_deceased : res.Item.is_deceased) ? 1 : 0,
       });
       await dynamo.send(new PutCommand({ TableName: PEOPLE_TABLE, Item: updated }));
+      _invalidate();
       return respond(200, updated);
     }
 
@@ -115,13 +142,15 @@ exports.handler = async (event) => {
     const delPersonMatch = path.match(/^\/api\/people\/([^/]+)$/);
     if (method === 'DELETE' && delPersonMatch) {
       const id = delPersonMatch[1];
-      await dynamo.send(new DeleteCommand({ TableName: PEOPLE_TABLE, Key: { id } }));
-      const rels = await scanRels();
-      await Promise.all(
-        rels
+      // Fetch rels before invalidating cache
+      const { rels } = await getTree();
+      await Promise.all([
+        dynamo.send(new DeleteCommand({ TableName: PEOPLE_TABLE, Key: { id } })),
+        ...rels
           .filter(r => r.person1_id === id || r.person2_id === id)
           .map(r => dynamo.send(new DeleteCommand({ TableName: RELS_TABLE, Key: { id: r.id } })))
-      );
+      ]);
+      _invalidate();
       return respond(200, { success: true });
     }
 
@@ -136,50 +165,53 @@ exports.handler = async (event) => {
         notes:      notes      || null,
         created_at: new Date().toISOString(),
       });
-      await dynamo.send(new PutCommand({ TableName: RELS_TABLE, Item: item }));
 
-      // Auto-associate: when adding a parent→child, also add the parent's spouses as co-parents
+      // Fetch current rels before writing (use cache)
+      const { rels: allRels } = await getTree();
+
+      // Collect all puts to fire in parallel
+      const puts = [dynamo.send(new PutCommand({ TableName: RELS_TABLE, Item: item }))];
+
       if (type === 'parent') {
-        const allRels = await scanRels();
-        const spouseRels = allRels.filter(r =>
-          r.type === 'spouse' &&
-          (r.person1_id === person1_id || r.person2_id === person1_id)
-        );
-        await Promise.all(spouseRels.map(async sr => {
-          const spouseId = sr.person1_id === person1_id ? sr.person2_id : sr.person1_id;
-          const already  = allRels.some(r =>
-            r.type === 'parent' && r.person1_id === spouseId && r.person2_id === person2_id
-          );
-          if (!already) {
-            await dynamo.send(new PutCommand({
-              TableName: RELS_TABLE,
-              Item: strip({ id: randomUUID(), person1_id: spouseId, person2_id, type: 'parent', created_at: new Date().toISOString() }),
-            }));
-          }
-        }));
+        // Add parent's existing spouses as co-parents of the new child
+        allRels
+          .filter(r => r.type === 'spouse' && (r.person1_id === person1_id || r.person2_id === person1_id))
+          .forEach(sr => {
+            const spouseId = sr.person1_id === person1_id ? sr.person2_id : sr.person1_id;
+            const already  = allRels.some(r =>
+              r.type === 'parent' && r.person1_id === spouseId && r.person2_id === person2_id
+            );
+            if (!already) {
+              puts.push(dynamo.send(new PutCommand({
+                TableName: RELS_TABLE,
+                Item: strip({ id: randomUUID(), person1_id: spouseId, person2_id, type: 'parent', created_at: new Date().toISOString() }),
+              })));
+            }
+          });
       }
 
-      // Auto-associate: when adding a spouse relationship, each partner inherits the other's existing children
       if (type === 'spouse') {
-        const allRels = await scanRels();
+        // Each partner inherits the other's existing children
         for (const [parentId, otherParentId] of [[person1_id, person2_id], [person2_id, person1_id]]) {
-          const theirChildren = allRels
+          allRels
             .filter(r => r.type === 'parent' && r.person1_id === parentId)
-            .map(r => r.person2_id);
-          for (const childId of theirChildren) {
-            const alreadyParent = allRels.some(r =>
-              r.type === 'parent' && r.person1_id === otherParentId && r.person2_id === childId
-            );
-            if (!alreadyParent) {
-              await dynamo.send(new PutCommand({
-                TableName: RELS_TABLE,
-                Item: strip({ id: randomUUID(), person1_id: otherParentId, person2_id: childId, type: 'parent', created_at: new Date().toISOString() }),
-              }));
-            }
-          }
+            .forEach(r => {
+              const childId = r.person2_id;
+              const alreadyParent = allRels.some(x =>
+                x.type === 'parent' && x.person1_id === otherParentId && x.person2_id === childId
+              );
+              if (!alreadyParent) {
+                puts.push(dynamo.send(new PutCommand({
+                  TableName: RELS_TABLE,
+                  Item: strip({ id: randomUUID(), person1_id: otherParentId, person2_id: childId, type: 'parent', created_at: new Date().toISOString() }),
+                })));
+              }
+            });
         }
       }
 
+      await Promise.all(puts);
+      _invalidate();
       return respond(200, item);
     }
 
@@ -192,6 +224,7 @@ exports.handler = async (event) => {
       const d       = JSON.parse(event.body || '{}');
       const updated = strip({ ...res.Item, ...d, id });
       await dynamo.send(new PutCommand({ TableName: RELS_TABLE, Item: updated }));
+      _invalidate();
       return respond(200, updated);
     }
 
@@ -199,6 +232,7 @@ exports.handler = async (event) => {
     const delRelMatch = path.match(/^\/api\/relationships\/([^/]+)$/);
     if (method === 'DELETE' && delRelMatch) {
       await dynamo.send(new DeleteCommand({ TableName: RELS_TABLE, Key: { id: delRelMatch[1] } }));
+      _invalidate();
       return respond(200, { success: true });
     }
 
