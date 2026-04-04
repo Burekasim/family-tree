@@ -182,15 +182,14 @@ function _computeLayout(people, relationships) {
     var sorted = [a, b].sort();
     var key = sorted[0] + ':' + sorted[1];
     if (families[key]) return;
-    // Shared children: any child whose parent list contains both a and b
-    var shared = childrenOf[a].filter(function(cid) {
-      return parentsOf[cid].indexOf(b) !== -1;
+    // All children of either parent (for layout width; edge drawing handles
+    // shared vs solo distinction separately using the graph)
+    var allChildren = [];
+    var seenChild = {};
+    childrenOf[a].concat(childrenOf[b]).forEach(function(cid) {
+      if (!seenChild[cid]) { seenChild[cid] = true; allChildren.push(cid); }
     });
-    // Also pick up children listed under b but not a (can happen with manual edits)
-    childrenOf[b].forEach(function(cid) {
-      if (parentsOf[cid].indexOf(a) !== -1 && shared.indexOf(cid) === -1) shared.push(cid);
-    });
-    families[key] = { parents: [sorted[0], sorted[1]], children: shared };
+    families[key] = { parents: [sorted[0], sorted[1]], children: allChildren };
     if (!personToUnit[a]) personToUnit[a] = key;
     if (!personToUnit[b]) personToUnit[b] = key;
   });
@@ -882,8 +881,16 @@ function _animateTransform() {
 
 function _onWheel(e) {
   e.preventDefault();
+  var svg = document.getElementById('tree-svg');
+  var rect = svg.getBoundingClientRect();
+  var mouseX = e.clientX - rect.left;
+  var mouseY = e.clientY - rect.top;
+  var oldScale = _scale;
   var factor = Math.pow(0.9985, e.deltaY);
   _scale = Math.min(3, Math.max(0.15, _scale * factor));
+  // Adjust pan so the point under the cursor stays fixed
+  _pan.x = mouseX - (mouseX - _pan.x) * (_scale / oldScale);
+  _pan.y = mouseY - (mouseY - _pan.y) * (_scale / oldScale);
   _applyTransform();
 }
 
@@ -935,7 +942,12 @@ function _onTouchMove(e) {
     _applyTransform();
   } else if (e.touches.length === 2 && _pinchStartDist !== null) {
     var dist = _getTouchDist(e.touches);
-    _scale = Math.min(3, Math.max(0.15, _pinchStartScale * (dist / _pinchStartDist)));
+    var newScale = Math.min(3, Math.max(0.15, _pinchStartScale * (dist / _pinchStartDist)));
+    var midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    var midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    _pan.x = midX - (midX - _pan.x) * (newScale / _scale);
+    _pan.y = midY - (midY - _pan.y) * (newScale / _scale);
+    _scale = newScale;
     _applyTransform();
   }
 }
