@@ -977,6 +977,24 @@ function setupEventListeners() {
   var addFirst = document.getElementById('btn-add-first');
   if (addFirst) addFirst.addEventListener('click', openAddPersonModal);
 
+  // Upcoming events toggle (mobile)
+  var btnUpcoming = document.getElementById('btn-upcoming');
+  if (btnUpcoming) {
+    btnUpcoming.addEventListener('click', function() {
+      document.getElementById('upcoming-widget').classList.toggle('open');
+    });
+  }
+  // Close upcoming widget when tapping outside
+  document.addEventListener('click', function(e) {
+    var widget = document.getElementById('upcoming-widget');
+    if (widget.classList.contains('open') &&
+        !widget.contains(e.target) &&
+        e.target !== btnUpcoming &&
+        !btnUpcoming.contains(e.target)) {
+      widget.classList.remove('open');
+    }
+  });
+
   // Add relationship button
   document.getElementById('btn-add-rel').addEventListener('click', function() {
     if (state.people.length < 2) {

@@ -588,8 +588,11 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 3px; }
 
+.mobile-only { display: none; }
+
 /* ===== Mobile ===== */
 @media (max-width: 640px) {
+  .mobile-only { display: inline-flex; }
   :root { --topbar-h: 56px; }
 
   /* ── Topbar ── */
@@ -750,8 +753,37 @@ body {
   .edge-legend { bottom: 200px; right: 16px; padding: 6px 10px; }
   .legend-item { font-size: 11px; gap: 6px; }
 
-  /* ── Upcoming widget — hidden ── */
-  .upcoming-widget { display: none; }
+  /* ── Upcoming widget — hidden by default, toggled as bottom sheet ── */
+  .upcoming-widget {
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-height: 50vh;
+    border-radius: 24px 24px 0 0;
+    border: none;
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.15);
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.32,0.72,0,1);
+    z-index: 95;
+  }
+  .upcoming-widget::before {
+    content: '';
+    display: block;
+    flex-shrink: 0;
+    width: 44px; height: 5px;
+    background: var(--border);
+    border-radius: 3px;
+    margin: 12px auto 0;
+  }
+  .upcoming-widget.open { transform: translateY(0); }
+  .upcoming-title { padding: 6px 16px 8px; font-size: 13px; }
+  .upcoming-list { max-height: calc(50vh - 70px); }
+  .upcoming-item { padding: 10px 16px; }
+  .upcoming-item-name { font-size: 14px; }
+  .upcoming-item-sub { font-size: 12px; }
+  .upcoming-item-days { font-size: 12px; }
 }
 
 /* ===== Password Gate ===== */
