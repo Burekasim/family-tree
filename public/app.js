@@ -383,6 +383,23 @@ function closeModal(id) {
 // Person Modal
 // ============================================================
 
+function _populateSpouseSelect(preselectedId) {
+  var sel = document.getElementById('inp-spouse');
+  sel.innerHTML = '<option value="">— ללא בן/בת זוג —</option>';
+  var sorted = state.people.slice().sort(function(a, b) {
+    var an = ((a.first_name || '') + ' ' + (a.last_name || '')).trim();
+    var bn = ((b.first_name || '') + ' ' + (b.last_name || '')).trim();
+    return an.localeCompare(bn, 'he');
+  });
+  sorted.forEach(function(p) {
+    var opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = ((p.first_name || '') + ' ' + (p.last_name || '')).trim();
+    if (p.id === preselectedId) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
 function _populateParentSelect(preselectedId) {
   var sel = document.getElementById('inp-parent');
   sel.innerHTML = '<option value="">— ללא הורה —</option>';
@@ -413,9 +430,11 @@ function openAddPersonModal(preselectedParentId) {
   document.getElementById('inp-deceased').checked = false;
   document.getElementById('inp-notes').value = '';
 
-  // Parent selector — show only when adding
+  // Parent + spouse selectors — show only when adding
   document.getElementById('inp-parent-wrap').style.display = '';
+  document.getElementById('inp-spouse-wrap').style.display = '';
   _populateParentSelect(preselectedParentId || null);
+  _populateSpouseSelect(null);
 
   // Reset photo
   var preview = document.getElementById('photo-preview');
@@ -457,8 +476,9 @@ function openEditPersonModal(id) {
     placeholder.style.display = 'flex';
   }
 
-  // Hide parent selector when editing
+  // Hide parent + spouse selectors when editing
   document.getElementById('inp-parent-wrap').style.display = 'none';
+  document.getElementById('inp-spouse-wrap').style.display = 'none';
 
   openModal('modal-person');
   document.getElementById('inp-first-name').focus();
@@ -497,14 +517,26 @@ function savePersonModal() {
     var wasEditing = state.editingPersonId;
     state.editingPersonId = null;
 
-    // If a parent was selected, create the relationship before refreshing
+    // If a parent or spouse was selected, create the relationships before refreshing
     var parentId = !wasEditing && document.getElementById('inp-parent').value;
+    var spouseId = !wasEditing && document.getElementById('inp-spouse').value;
+    var relPromises = [];
     if (parentId && person.id) {
-      apiPost('/api/relationships', {
+      relPromises.push(apiPost('/api/relationships', {
         person1_id: parentId,
         person2_id: person.id,
         type: 'parent'
-      }).then(function() {
+      }));
+    }
+    if (spouseId && person.id) {
+      relPromises.push(apiPost('/api/relationships', {
+        person1_id: person.id,
+        person2_id: spouseId,
+        type: 'spouse'
+      }));
+    }
+    if (relPromises.length > 0) {
+      Promise.all(relPromises).then(function() {
         refreshTree().then(function() { showPersonPanel(person.id); });
       });
     } else {
