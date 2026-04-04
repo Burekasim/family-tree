@@ -51,13 +51,25 @@ exports.handler = async (event) => {
 
   if (method === 'OPTIONS') return respond(200, {});
 
-  // Auth check
-  const auth = (event.headers || {})['authorization'] || '';
-  if (API_TOKEN && auth !== 'Bearer ' + API_TOKEN) {
-    return respond(401, { error: 'Unauthorized' });
-  }
-
   try {
+
+    // POST /api/auth  — open endpoint, validates last name against DB
+    if (method === 'POST' && path === '/api/auth') {
+      const { lastName } = JSON.parse(event.body || '{}');
+      if (!lastName) return respond(400, { error: 'lastName required' });
+      const r = await dynamo.send(new ScanCommand({ TableName: PEOPLE_TABLE }));
+      const found = (r.Items || []).some(p =>
+        (p.last_name || '').trim().toLowerCase() === lastName.trim().toLowerCase()
+      );
+      if (!found) return respond(401, { error: 'שם משפחה לא נמצא' });
+      return respond(200, { token: API_TOKEN });
+    }
+
+    // Auth check for all other routes
+    const auth = (event.headers || {})['authorization'] || '';
+    if (API_TOKEN && auth !== 'Bearer ' + API_TOKEN) {
+      return respond(401, { error: 'Unauthorized' });
+    }
 
     // GET /api/tree
     if (method === 'GET' && path === '/api/tree') {

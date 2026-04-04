@@ -988,10 +988,7 @@ function setupPasswordGate() {
   var gate = document.getElementById('password-gate');
   if (!gate) return;
 
-  var CORRECT = 'heymakarenea';
-
   if (sessionStorage.getItem('ft_auth') === '1') {
-    sessionStorage.setItem('ft_token', CORRECT);
     gate.classList.add('hidden');
     return;
   }
@@ -1001,18 +998,37 @@ function setupPasswordGate() {
   var btn   = document.getElementById('password-submit');
 
   function tryPassword() {
-    if (input.value === CORRECT) {
-      sessionStorage.setItem('ft_auth', '1');
-      sessionStorage.setItem('ft_token', CORRECT);
-      gate.classList.add('hidden');
-      refreshTree(); // load data now that we're authenticated
-    } else {
-      errEl.textContent = 'סיסמה שגויה, נסה שוב.';
-      input.classList.add('error');
-      input.value = '';
-      setTimeout(function() { input.classList.remove('error'); }, 400);
-      input.focus();
-    }
+    var lastName = input.value.trim();
+    if (!lastName) return;
+    btn.disabled = true;
+    errEl.textContent = '';
+
+    var base = (window.APP_CONFIG && window.APP_CONFIG.apiBase) || '';
+    fetch(base + '/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lastName: lastName })
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        btn.disabled = false;
+        if (data.token) {
+          sessionStorage.setItem('ft_auth', '1');
+          sessionStorage.setItem('ft_token', data.token);
+          gate.classList.add('hidden');
+          refreshTree();
+        } else {
+          errEl.textContent = data.error || 'שם משפחה לא נמצא';
+          input.classList.add('error');
+          input.value = '';
+          setTimeout(function() { input.classList.remove('error'); }, 400);
+          input.focus();
+        }
+      })
+      .catch(function() {
+        btn.disabled = false;
+        errEl.textContent = 'שגיאת חיבור, נסה שוב.';
+      });
   }
 
   btn.addEventListener('click', tryPassword);
