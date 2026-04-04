@@ -138,7 +138,7 @@ exports.handler = async (event) => {
       });
       await dynamo.send(new PutCommand({ TableName: RELS_TABLE, Item: item }));
 
-      // Auto-associate spouse as co-parent
+      // Auto-associate: when adding a parent→child, also add the parent's spouses as co-parents
       if (type === 'parent') {
         const allRels = await scanRels();
         const spouseRels = allRels.filter(r =>
@@ -158,6 +158,28 @@ exports.handler = async (event) => {
           }
         }));
       }
+
+      // Auto-associate: when adding a spouse relationship, each partner inherits the other's existing children
+      if (type === 'spouse') {
+        const allRels = await scanRels();
+        for (const [parentId, otherParentId] of [[person1_id, person2_id], [person2_id, person1_id]]) {
+          const theirChildren = allRels
+            .filter(r => r.type === 'parent' && r.person1_id === parentId)
+            .map(r => r.person2_id);
+          for (const childId of theirChildren) {
+            const alreadyParent = allRels.some(r =>
+              r.type === 'parent' && r.person1_id === otherParentId && r.person2_id === childId
+            );
+            if (!alreadyParent) {
+              await dynamo.send(new PutCommand({
+                TableName: RELS_TABLE,
+                Item: strip({ id: randomUUID(), person1_id: otherParentId, person2_id: childId, type: 'parent', created_at: new Date().toISOString() }),
+              }));
+            }
+          }
+        }
+      }
+
       return respond(200, item);
     }
 
