@@ -317,6 +317,56 @@ function closePersonPanel() {
   document.getElementById('person-panel').classList.add('hidden');
 }
 
+function setupPanelPhotoUpload() {
+  var editEl   = document.getElementById('panel-photo-edit');
+  var inputEl  = document.getElementById('panel-photo-input');
+
+  editEl.addEventListener('click', function() {
+    if (state.selectedPersonId) inputEl.click();
+  });
+
+  inputEl.addEventListener('change', function() {
+    var file = inputEl.files[0];
+    if (!file || !state.selectedPersonId) return;
+    var id = state.selectedPersonId;
+    inputEl.value = '';
+
+    resizeImage(file, 1200, 0.85, function(blob, mimeType) {
+      var cfg = window.APP_CONFIG || {};
+      var doUpload = cfg.usePresignedUpload
+        ? apiPost('/api/upload-url', { filename: file.name, contentType: mimeType })
+            .then(function(data) {
+              if (data.error) throw new Error(data.error);
+              return fetch(data.uploadUrl, {
+                method: 'PUT', headers: { 'Content-Type': mimeType }, body: blob
+              }).then(function(r) {
+                if (!r.ok) throw new Error('Upload failed: ' + r.status);
+                return data.photoUrl;
+              });
+            })
+        : (function() {
+            var formData = new FormData();
+            formData.append('photo', blob, file.name);
+            return fetch('/api/upload', { method: 'POST', body: formData })
+              .then(function(r) { return r.json(); })
+              .then(function(d) {
+                if (d.error) throw new Error(d.error);
+                return d.filename;
+              });
+          })();
+
+      doUpload.then(function(photoValue) {
+        return apiPut('/api/people/' + id, { photo: photoValue });
+      }).then(function(person) {
+        if (person.error) { showError(person.error); return; }
+        refreshTree().then(function() { showPersonPanel(id); });
+      }).catch(function(err) {
+        showError('שגיאת העלאה: ' + err.message);
+      });
+    });
+  });
+}
+
 // ============================================================
 // Modal helpers
 // ============================================================
@@ -976,6 +1026,7 @@ document.addEventListener('DOMContentLoaded', function() {
   setupPasswordGate();
   setupEventListeners();
   setupPhotoUpload();
+  setupPanelPhotoUpload();
   setupSearch();
 
   // Load initial data only if already authenticated

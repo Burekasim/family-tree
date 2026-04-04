@@ -210,6 +210,27 @@ body {
   background: linear-gradient(135deg, #ebf4ff 0%, #f0fff4 100%);
   border-bottom: 1px solid var(--border);
 }
+.panel-photo-edit {
+  position: relative;
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.panel-photo-edit:hover .panel-photo-overlay { opacity: 1; }
+.panel-photo-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  opacity: 0;
+  transition: opacity 0.18s;
+  pointer-events: none;
+}
 .panel-photo {
   width: 88px; height: 88px;
   border-radius: 50%;
@@ -603,6 +624,7 @@ body {
   }
 
   .panel-close { top: 16px; }
+  .panel-photo-overlay { opacity: 0.7; }
   .panel-photo-wrap { padding: 18px 0 12px; }
   .panel-photo, .panel-initials { width: 70px; height: 70px; }
   .panel-initials { font-size: 26px; }

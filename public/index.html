@@ -89,8 +89,12 @@
   <aside id="person-panel" class="person-panel hidden">
     <button class="panel-close" id="panel-close" title="סגור">✕</button>
     <div class="panel-photo-wrap">
-      <img id="panel-photo" src="" alt="" class="panel-photo hidden">
-      <div id="panel-initials" class="panel-initials"></div>
+      <div class="panel-photo-edit" id="panel-photo-edit" title="שנה תמונה">
+        <img id="panel-photo" src="" alt="" class="panel-photo hidden">
+        <div id="panel-initials" class="panel-initials"></div>
+        <div class="panel-photo-overlay">📷</div>
+      </div>
+      <input type="file" id="panel-photo-input" accept="image/*" style="display:none">
     </div>
     <div class="panel-body">
       <h2 id="panel-name" class="panel-name"></h2>
