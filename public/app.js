@@ -1109,9 +1109,67 @@ function setupPasswordGate() {
   var errEl = document.getElementById('password-error');
   var btn   = document.getElementById('password-submit');
 
+  var MAX_ATTEMPTS  = 5;
+  var LOCKOUT_MS    = 5 * 60 * 1000; // 5 minutes
+  var LS_ATTEMPTS   = 'ft_pw_attempts';
+  var LS_LOCKOUT_AT = 'ft_pw_lockout_at';
+  var _countdownTimer = null;
+
+  function getAttempts()  { return parseInt(localStorage.getItem(LS_ATTEMPTS)  || '0', 10); }
+  function getLockoutAt() { return parseInt(localStorage.getItem(LS_LOCKOUT_AT) || '0', 10); }
+
+  function setLocked() {
+    localStorage.setItem(LS_LOCKOUT_AT, Date.now().toString());
+    localStorage.setItem(LS_ATTEMPTS, '0');
+  }
+
+  function clearLock() {
+    localStorage.removeItem(LS_ATTEMPTS);
+    localStorage.removeItem(LS_LOCKOUT_AT);
+  }
+
+  function applyLockout() {
+    input.disabled = true;
+    btn.disabled   = true;
+    input.value    = '';
+
+    if (_countdownTimer) clearInterval(_countdownTimer);
+    _countdownTimer = setInterval(function() {
+      var remaining = LOCKOUT_MS - (Date.now() - getLockoutAt());
+      if (remaining <= 0) {
+        clearInterval(_countdownTimer);
+        clearLock();
+        input.disabled = false;
+        btn.disabled   = false;
+        errEl.textContent = '';
+        input.focus();
+        return;
+      }
+      var mins = Math.floor(remaining / 60000);
+      var secs = Math.floor((remaining % 60000) / 1000);
+      errEl.textContent = 'יותר מדי ניסיונות. נסה שוב בעוד ' +
+        mins + ':' + (secs < 10 ? '0' : '') + secs;
+    }, 1000);
+  }
+
+  // Check lockout state on load
+  var lockoutAt = getLockoutAt();
+  if (lockoutAt && (Date.now() - lockoutAt) < LOCKOUT_MS) {
+    applyLockout();
+  }
+
   function tryPassword() {
+    if (input.disabled) return;
     var lastName = input.value.trim();
     if (!lastName) return;
+
+    // Check lockout (may have expired since page load)
+    var lockedAt = getLockoutAt();
+    if (lockedAt && (Date.now() - lockedAt) < LOCKOUT_MS) {
+      applyLockout();
+      return;
+    }
+
     btn.disabled = true;
     errEl.textContent = '';
 
@@ -1125,16 +1183,27 @@ function setupPasswordGate() {
       .then(function(data) {
         btn.disabled = false;
         if (data.token) {
+          clearLock();
           sessionStorage.setItem('ft_auth', '1');
           sessionStorage.setItem('ft_token', data.token);
           gate.classList.add('hidden');
           refreshTree();
         } else {
-          errEl.textContent = data.error || 'שם משפחה לא נמצא';
+          var attempts = getAttempts() + 1;
           input.classList.add('error');
           input.value = '';
           setTimeout(function() { input.classList.remove('error'); }, 400);
-          input.focus();
+
+          if (attempts >= MAX_ATTEMPTS) {
+            setLocked();
+            applyLockout();
+          } else {
+            localStorage.setItem(LS_ATTEMPTS, attempts.toString());
+            var left = MAX_ATTEMPTS - attempts;
+            errEl.textContent = (data.error || 'שם משפחה לא נמצא') +
+              ' (' + left + ' ניסיונות נותרו)';
+            input.focus();
+          }
         }
       })
       .catch(function() {
@@ -1147,7 +1216,7 @@ function setupPasswordGate() {
   input.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') tryPassword();
   });
-  input.focus();
+  if (!input.disabled) input.focus();
 }
 
 document.addEventListener('DOMContentLoaded', function() {
