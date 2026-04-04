@@ -461,19 +461,26 @@ function _drawEdges(root, positions, people, relationships) {
     if (processedParentUnits[unitKey]) return;
     processedParentUnits[unitKey] = true;
 
-    // Determine which children belong to this unit
+    // Children shared with the spouse → couple unit
     var unitChildren = children.filter(function(cid) {
       if (!positions[cid]) return false;
-      if (spouse) {
-        return parentsOf[cid].indexOf(spouse) !== -1;
-      }
+      if (spouse) return parentsOf[cid].indexOf(spouse) !== -1;
       return true;
     });
 
+    // Children NOT shared with the spouse (different other parent) — drawn as
+    // a separate solo unit so they are never dropped
+    var soloChildren = spouse ? children.filter(function(cid) {
+      return positions[cid] && parentsOf[cid].indexOf(spouse) === -1;
+    }) : [];
+
+    if (unitChildren.length === 0 && soloChildren.length === 0) return;
+
+    // If there were no shared children at all, treat all children as the main group
     if (unitChildren.length === 0) {
-      // Draw edges just from this parent to all their children
-      unitChildren = children.filter(function(cid) { return positions[cid]; });
-      if (unitChildren.length === 0) return;
+      unitChildren = soloChildren;
+      soloChildren = [];
+      spouse = null;
     }
 
     var pos = positions[id];
@@ -549,6 +556,63 @@ function _drawEdges(root, positions, people, relationships) {
     })(id, spouse, unitChildren.slice(), edgeColor);
 
     edgeGroup.appendChild(unitGroup);
+
+    // Draw solo edges for children not shared with the spouse (e.g. child from
+    // a different relationship while this parent is also part of a couple)
+    if (soloChildren.length > 0) {
+      var soloKey = 'solo:' + id;
+      if (!processedParentUnits[soloKey]) {
+        processedParentUnits[soloKey] = true;
+        var soloGroup = _svgEl('g', {
+          class: 'edge-unit',
+          'data-unit': soloKey,
+          'data-parents': id,
+          'data-children': soloChildren.join(','),
+          style: 'cursor:pointer'
+        });
+        var soloAnchorX = pos.x + CARD_W / 2;
+        var soloChildXs = soloChildren.map(function(cid) { return positions[cid].x + CARD_W / 2; });
+        var soloMinCX = Math.min.apply(null, soloChildXs);
+        var soloMaxCX = Math.max.apply(null, soloChildXs);
+        var soloJunctionY = parentBottom + Math.round(V_GAP * 0.45);
+
+        soloGroup.appendChild(_svgEl('line', {
+          x1: soloAnchorX, y1: parentBottom, x2: soloAnchorX, y2: soloJunctionY,
+          stroke: 'transparent', 'stroke-width': 12
+        }));
+        soloGroup.appendChild(_svgEl('line', {
+          x1: soloAnchorX, y1: parentBottom, x2: soloAnchorX, y2: soloJunctionY,
+          stroke: edgeColor, 'stroke-width': 2
+        }));
+        var soloBarX1 = Math.min(soloAnchorX, soloMinCX);
+        var soloBarX2 = Math.max(soloAnchorX, soloMaxCX);
+        soloGroup.appendChild(_svgEl('line', {
+          x1: soloBarX1, y1: soloJunctionY, x2: soloBarX2, y2: soloJunctionY,
+          stroke: edgeColor, 'stroke-width': 2
+        }));
+        soloGroup.appendChild(_svgEl('circle', {
+          cx: soloAnchorX, cy: soloJunctionY, r: 4,
+          fill: edgeColor, stroke: 'none'
+        }));
+        soloChildren.forEach(function(cid) {
+          var cpos = positions[cid];
+          var ccx = cpos.x + CARD_W / 2;
+          soloGroup.appendChild(_svgEl('line', {
+            x1: ccx, y1: soloJunctionY, x2: ccx, y2: cpos.y,
+            stroke: edgeColor, 'stroke-width': 2
+          }));
+        });
+        (function(pId, children, color) {
+          soloGroup.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var involved = [pId];
+            children.forEach(function(cid) { involved.push(cid); });
+            window.highlightFamily(involved, color);
+          });
+        })(id, soloChildren.slice(), edgeColor);
+        edgeGroup.appendChild(soloGroup);
+      }
+    }
   });
 
   root.appendChild(edgeGroup);
