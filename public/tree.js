@@ -833,9 +833,11 @@ window.centerOnPerson = function(personId) {
   var svg = document.getElementById('tree-svg');
   var svgW = svg.clientWidth || window.innerWidth;
   var svgH = (svg.clientHeight || window.innerHeight) - 60;
+  // Zoom in to a comfortable reading scale (at least 0.85, keep current if already bigger)
+  _scale = Math.max(_scale, 0.85);
   _pan.x = svgW / 2 - (pos.x + CARD_W / 2) * _scale;
   _pan.y = svgH / 2 - (pos.y + CARD_H / 2) * _scale;
-  _applyTransform();
+  _animateTransform();
 };
 
 function _centerTree() {
@@ -868,6 +870,14 @@ function _applyTransform() {
   if (root) {
     root.setAttribute('transform', 'translate(' + _pan.x + ',' + _pan.y + ') scale(' + _scale + ')');
   }
+}
+
+function _animateTransform() {
+  var root = document.getElementById('tree-root');
+  if (!root) return;
+  root.style.transition = 'transform 0.38s cubic-bezier(0.4,0,0.2,1)';
+  _applyTransform();
+  setTimeout(function() { root.style.transition = ''; }, 420);
 }
 
 function _onWheel(e) {

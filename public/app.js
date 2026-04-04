@@ -970,6 +970,7 @@ function setupEventListeners() {
 
 window.selectPerson = function(id) {
   showPersonPanel(id);
+  if (window.centerOnPerson) window.centerOnPerson(id);
 };
 
 window.deselectPerson = function() {
