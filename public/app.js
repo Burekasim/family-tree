@@ -1090,6 +1090,16 @@ function setupPasswordGate() {
   var gate = document.getElementById('password-gate');
   if (!gate) return;
 
+  // Fire a silent prewarm request so Lambda + DynamoDB are ready
+  // before the user finishes typing their last name.
+  // Using an empty lastName means it returns 401, but the container
+  // and cache are fully initialized by the time the real login fires.
+  fetch('/api/auth', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lastName: '' })
+  }).catch(function() {});
+
   if (sessionStorage.getItem('ft_auth') === '1') {
     gate.classList.add('hidden');
     return;

@@ -114,11 +114,6 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /api/{proxy+}
             Method: ANY
-        Warming:
-          Type: Schedule
-          Properties:
-            Schedule: rate(5 minutes)
-            Input: '{"source":"family-tree-warming"}'
 
   # ── API Gateway HTTP API ────────────────────────────────────
   HttpApi:

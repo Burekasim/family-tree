@@ -67,9 +67,6 @@ async function getTree() {
 
 // ── Handler ──────────────────────────────────────────────────
 exports.handler = async (event) => {
-  // EventBridge warming ping — return immediately to keep the container alive
-  if (event.source === 'family-tree-warming') return { statusCode: 200, body: 'warm' };
-
   const method = event.requestContext?.http?.method;
   const path   = event.rawPath || '';
 
