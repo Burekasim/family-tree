@@ -10,13 +10,25 @@
 
   <!-- Password Gate -->
   <div id="password-gate">
+    <div class="login-bg-decoration" aria-hidden="true">
+      <span class="login-leaf login-leaf-1">🍃</span>
+      <span class="login-leaf login-leaf-2">🍂</span>
+      <span class="login-leaf login-leaf-3">🌿</span>
+      <span class="login-leaf login-leaf-4">🍃</span>
+    </div>
     <div class="password-box">
-      <div class="tree-icon">🌳</div>
-      <h1>עץ משפחה</h1>
-      <p>הזן שם משפחה כדי להמשיך</p>
-      <input type="text" id="password-input" placeholder="שם משפחה" autocomplete="off" autocorrect="off" autocapitalize="off">
-      <div id="password-error"></div>
-      <button class="btn btn-primary" id="password-submit">כניסה</button>
+      <div class="login-logo">
+        <span class="login-tree-emoji">🌳</span>
+      </div>
+      <div class="login-header">
+        <h1>עץ משפחה</h1>
+        <p>הזן שם משפחה כדי להמשיך</p>
+      </div>
+      <div class="login-form">
+        <input type="text" id="password-input" placeholder="שם משפחה" autocomplete="off" autocorrect="off" autocapitalize="off">
+        <div id="password-error"></div>
+        <button class="btn btn-primary login-btn" id="password-submit">כניסה</button>
+      </div>
     </div>
   </div>
 

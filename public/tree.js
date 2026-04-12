@@ -712,7 +712,7 @@ function _drawCards(root, positions, people) {
     // ז"ל — top-right corner
     if (person.is_deceased || person.death_date) {
       var zlText = _svgEl('text', {
-        x: x + CARD_W - 7, y: y + 13,
+        x: x + CARD_W - 9, y: y + 20,
         'text-anchor': 'end', 'dominant-baseline': 'central',
         'font-size': '11', 'font-weight': '600', fill: '#718096',
         style: 'user-select:none;pointer-events:none'

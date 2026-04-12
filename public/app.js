@@ -917,7 +917,7 @@ function refreshUpcomingWidget() {
       var dmmdd = getMMDD(p.death_date);
       if (dmmdd) {
         var ddays = daysUntil(dmmdd);
-        if (ddays <= 30) events.push({ days: ddays, icon: '🕯️', name: personName(p.id), sub: 'יארצייט', id: p.id });
+        if (ddays <= 30) events.push({ days: ddays, icon: '🕯️', name: personName(p.id), sub: 'יום פטירה', id: p.id });
       }
     }
   });
