@@ -889,7 +889,7 @@ function _onWheel(e) {
   var mouseY = e.clientY - rect.top;
   var oldScale = _scale;
   // Mac touchpad pinch-to-zoom fires wheel events with ctrlKey=true; boost speed 50%
-  var delta = e.ctrlKey ? e.deltaY * 1.5 : e.deltaY;
+  var delta = e.ctrlKey ? e.deltaY * 2.25 : e.deltaY;
   var factor = Math.pow(0.9985, delta);
   _scale = Math.min(3, Math.max(0.15, _scale * factor));
   // Adjust pan so the point under the cursor stays fixed
